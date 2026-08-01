@@ -104,6 +104,65 @@ public final class ChatCollectionViewController: UIViewController {
         settleLink?.invalidate()
         settleLink = nil
     }
+
+    // MARK: - Change-driven re-measure + lazy scroll
+
+    /// Coalesces all height-change signals (streaming render growth, thinking
+    /// toggle) into ONE re-measure per runloop, then conditionally lazy-scrolls.
+    private var needsReMeasure = false
+
+    /// Entry for BOTH height-change sources: the RenderedHeightObserver (streaming
+    /// content growth) and the thinking toggle (onLayoutChange). Re-measures the
+    /// cell at the just-rendered height, then lazy-scrolls if following.
+    func onBubbleHeightChanged() {
+        scheduleReMeasure()
+    }
+
+    private func scheduleReMeasure() {
+        guard !needsReMeasure else { return }
+        needsReMeasure = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.needsReMeasure = false
+            self.collectionView.collectionViewLayout.invalidateLayout()
+            self.collectionView.layoutIfNeeded()
+            self.updateTopInsetForShortContent()
+            self.maybeLazyScroll()
+        }
+    }
+
+    /// Really-lazy scroll: coalesce a burst of height changes into ONE animated
+    /// scroll to the bottom (only when following). A height change landing while an
+    /// animation runs re-aims the same animator instead of stacking another.
+    private var lazyScrollTask: Task<Void, Never>?
+    private var scrollAnimator: UIViewPropertyAnimator?
+
+    func maybeLazyScroll() {
+        guard shouldFollow else { return }
+        lazyScrollTask?.cancel()
+        lazyScrollTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .milliseconds(50))
+            guard self.shouldFollow else { return }
+            self.collectionView.layoutIfNeeded()
+            let inset = self.collectionView.adjustedContentInset
+            let targetY = ScrollMath.scrollToBottomTarget(
+                contentSizeHeight: self.collectionView.contentSize.height,
+                boundsHeight: self.collectionView.bounds.height,
+                adjustedBottomInset: inset.bottom,
+                topInset: inset.top
+            )
+            if let animator = self.scrollAnimator {
+                animator.stopAnimation(false)
+                animator.finishAnimation(at: .current)
+            }
+            let animator = UIViewPropertyAnimator(duration: 0.2, curve: .easeOut) {
+                self.collectionView.contentOffset.y = targetY
+            }
+            self.scrollAnimator = animator
+            animator.startAnimation()
+        }
+    }
 }
 
 // MARK: - Service sync
@@ -228,17 +287,7 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
             return existing
         }
         let host = UIHostingController(rootView: MessageBubbleView(message: message, onLayoutChange: { [weak self] in
-            // A thinking block expanding/collapsing changes the bubble's
-            // intrinsic height with no settle loop running (post-stream), so
-            // the cached cell would keep its old height and the content would
-            // overlap its neighbor. Re-measure after SwiftUI applies the state
-            // change, then re-anchor if near the bottom.
-            Task { @MainActor in
-                guard let self else { return }
-                self.collectionView.collectionViewLayout.invalidateLayout()
-                self.collectionView.layoutIfNeeded()
-                if self.isNearBottom() { self.scrollToBottom(animated: false) }
-            }
+            self?.onBubbleHeightChanged()
         }))
         host.sizingOptions = .intrinsicContentSize
         host.view.translatesAutoresizingMaskIntoConstraints = false
