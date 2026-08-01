@@ -5,15 +5,13 @@ import SwiftUI
 
 public struct MessageBubbleView: View {
     public let message: StreamingMessage
-    public let isStreaming: Bool
     public let isInline: Bool
 
     @State private var thinkingExpanded = false
     @State private var userManuallyCollapsed = false
 
-    public init(message: StreamingMessage, isStreaming: Bool, isInline: Bool = false) {
+    public init(message: StreamingMessage, isInline: Bool = false) {
         self.message = message
-        self.isStreaming = isStreaming
         self.isInline = isInline
     }
 

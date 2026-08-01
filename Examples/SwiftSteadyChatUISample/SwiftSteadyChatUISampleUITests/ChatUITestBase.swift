@@ -1,19 +1,18 @@
 import XCTest
 
-// UI automation for the SPIKE chat app (cached-hosting-controller streaming
-// markdown in a UICollectionView). Default launch = spike. Launch args:
+// UI automation for the sample chat app (cached-hosting-controller streaming
+// markdown in a UICollectionView). Launch args:
 //   --seed-messages N  → pre-fill N user+assistant pairs (KeyboardPushTests)
 //   --long-reply       → deterministic long markdown reply (StreamingFlickerTests)
 //
-// The push-up suite is ported from stable-frame-keyboard-fix and asserts the
-// three bug repros are FIXED on the spike:
+// The push-up suite asserts the three bug repros are FIXED:
 //   • no scroll down into a keyboard-height blank
 //   • short content is bottom-anchored (no blank below the last message)
 //   • push-up is not doubled for short content
-// The flicker suite is NEW — it asserts the streaming bubble grows in place
-// without being recreated (the thing every previous fix broke).
+// The flicker suite asserts the streaming bubble grows in place without being
+// recreated (the thing every previous fix broke).
 
-/// Shared helpers for the spike chat UI tests.
+/// Shared helpers for the sample chat UI tests.
 class ChatUITestBase: XCTestCase {
     let app = XCUIApplication()
 

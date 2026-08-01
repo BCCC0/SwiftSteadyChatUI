@@ -2,7 +2,6 @@ import UIKit
 import SwiftUI
 import SwiftStreamingMarkdown
 
-// Ported from the validated spike controller (streaming_ui_test/MyProject/ChatViewController.swift).
 // Cached-hosting-controller pattern: one UIHostingController<MessageBubbleView> is
 // cached per message UUID and OUTLIVES the cell. The collection cell merely hosts
 // the cached hosting view. Because the chat service streams text through the
@@ -223,10 +222,7 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
         if let existing = hostingControllers[message.id] {
             return existing
         }
-        let host = UIHostingController(rootView: MessageBubbleView(
-            message: message,
-            isStreaming: message.streamSource != nil && !message.isStreamFinished
-        ))
+        let host = UIHostingController(rootView: MessageBubbleView(message: message))
         host.sizingOptions = .intrinsicContentSize
         host.view.translatesAutoresizingMaskIntoConstraints = false
         host.view.backgroundColor = .clear

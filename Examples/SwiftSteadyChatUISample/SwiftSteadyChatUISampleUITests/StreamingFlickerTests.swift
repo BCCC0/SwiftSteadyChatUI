@@ -9,7 +9,7 @@ final class StreamingFlickerTests: ChatUITestBase {
         app.launch()
     }
 
-    /// The core spike claim: the streaming assistant bubble grows in place and
+    /// The core claim: the streaming assistant bubble grows in place and
     /// is NEVER recreated (the collection view must not reload mid-stream).
     /// Asserted by sampling the bubble across the whole stream:
     ///   • it exists continuously (never disappears → no view recreation)

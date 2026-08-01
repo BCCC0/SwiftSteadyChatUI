@@ -62,7 +62,14 @@ extension ChatCollectionViewController {
         )
         let atTarget = abs(collectionView.contentOffset.y - targetY) < 1
         settleTicks += 1
-        if settleTicks > config.settleMaxTicks, stableTicks >= config.settleStableTicks, atTarget, !isStreaming {
+        // Stop once content is stable and not streaming. When following the
+        // bottom, still require atTarget (don't exit mid-scroll); when the user
+        // has scrolled away, atTarget never becomes true (we don't scroll), so
+        // stop anyway — otherwise the CADisplayLink spins at 60fps forever on a
+        // static screen, re-measuring + evicting with no work to do.
+        let stableAndDone = stableTicks >= config.settleStableTicks && !isStreaming
+        let canStop = atTarget || !shouldFollowBottom
+        if settleTicks > config.settleMaxTicks, stableAndDone, canStop {
             stopSettleLink()
         }
         // Bound the cache every tick: finished messages whose cell has scrolled

@@ -50,7 +50,7 @@ Add the package to your app via Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/YOUR_ORG/SwiftSteadyChatUI", from: "0.1.0")
+    .package(url: "https://github.com/BCCC0/SwiftSteadyChatUI", from: "0.1.0")
 ]
 ```
 
@@ -72,6 +72,7 @@ import SwiftUI
 final class MyChatService: ChatService {
     var messages: [StreamingMessage] = []
     var onMessagesChanged: (() -> Void)?
+    private let model: MyLLMModel   // your LLM client — streamReply yields text chunks
 
     func sendMessage(_ text: String) async {
         messages.append(StreamingMessage(role: .user, content: text))
@@ -83,11 +84,21 @@ final class MyChatService: ChatService {
         onMessagesChanged?()
 
         var accumulated = ""
-        for chunk in try await myModel.streamReply(to: text) {
+        for chunk in try await model.streamReply(to: text) {
             accumulated += chunk
             source.yield(accumulated)   // each yield passes the full accumulated text
         }
         source.finish()
+
+        // IMPORTANT: replace the streaming message with a FINISHED copy that
+        // keeps `streamSource` alive. The UI's cached bubble renders the final
+        // text statically once `isStreamFinished == true` — without this the
+        // settle loop never stops and the cache never evicts.
+        guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
+        messages[idx] = StreamingMessage(
+            id: id, role: .assistant, content: accumulated,
+            streamSource: source, isStreamFinished: true
+        )
         onMessagesChanged?()
     }
 }
@@ -103,11 +114,17 @@ struct ChatView: View {
 }
 ```
 
-> **`ChatService` contract:** `messages` must stay *static mid-stream*. Text
-> flows through each streaming message's `ChatStreamSource` (see
-> `StreamingMessage.streamSource`), and the array is only ever *replaced* —
-> never mutated in place — while a message is streaming. This is what lets the
-> collection view avoid reloading.
+> **`ChatService` contract:**
+> 1. `messages` must stay *static mid-stream*. Text flows through each streaming
+>    message's `ChatStreamSource` (see `StreamingMessage.streamSource`), and the
+>    array is only ever *replaced* — never mutated in place — while a message is
+>    streaming. This is what lets the collection view avoid reloading.
+> 2. A message's `content`/`thinking`/`role` must be **final at first render** —
+>    the cached bubble captures the struct by value. All evolving text goes
+>    through `streamSource`; when the stream ends, **replace** the message with a
+>    finished copy (keeping `streamSource` alive, as in the example above). A
+>    service that clears `streamSource` on finish will show a stale/empty bubble
+>    until eviction re-creates it.
 
 ### Configuration
 
@@ -150,7 +167,7 @@ with `make generate-sample-project`.
 ```sh
 make help                  # Show all targets
 make lint                  # SwiftLint (strict)
-make test                  # Package unit tests (40 Swift Testing tests)
+make test                  # Package unit tests (41 Swift Testing tests)
 make build-sample          # Generate + build the sample app
 make ci                    # lint + test + build-sample (same as CI)
 ```

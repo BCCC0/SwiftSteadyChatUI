@@ -1,11 +1,9 @@
 /// SwiftSteadyChatUI
 ///
-/// A streaming chat user interface library built on SwiftUI and
-/// SwiftStreamingMarkdown.
-///
-/// This module is currently a placeholder: it establishes the package, the
-/// module, and the SwiftStreamingMarkdown dependency. The real chat UI
-/// implementation is delivered in a follow-up task.
+/// A flicker-free streaming-markdown chat UI layer for iOS, built on SwiftUI
+/// and SwiftStreamingMarkdown. See `ChatScreen` (SwiftUI entry point),
+/// `ChatCollectionViewController` (UIKit), and the `ChatService` seam for
+/// getting your messages in.
 public struct SwiftSteadyChatUI {
   /// The current version of the SwiftSteadyChatUI library.
   public static let version = "0.1.0"
