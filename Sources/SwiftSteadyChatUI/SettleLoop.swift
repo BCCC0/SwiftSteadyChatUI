@@ -64,7 +64,7 @@ extension ChatCollectionViewController {
         }
 
         // Follow the bottom only when the state machine says so (at the bottom,
-        // not mid-gesture). A gesture breaks it instantly (scrollViewDidScroll).
+        // not mid-gesture). A gesture breaks it instantly (scrollViewWillBeginDragging).
         if shouldFollow { scrollToBottom(animated: false) }
 
         // Only stop once the offset has actually reached the bottom target and
