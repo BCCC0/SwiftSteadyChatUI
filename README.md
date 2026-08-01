@@ -19,17 +19,9 @@ Built with this library: **[SwiftTavern](https://github.com/BCCC0/SwiftTavern)**
 
 Flicker-free streaming, correct keyboard handling, and grows-in-place — in action:
 
-**Streaming long markdown reply**
-
-<video src="demo/demo1.mp4" controls muted loop width="240"></video>
-
-**Keyboard push-up & dismiss**
-
-<video src="demo/demo2.mp4" controls muted loop width="240"></video>
-
-**Scrolled away: no push-up**
-
-<video src="demo/demo3.mp4" controls muted loop width="240"></video>
+| Streaming long markdown reply | Keyboard push-up & dismiss | Scrolled away: no push-up |
+|---|---|---|
+| <video src="https://github.com/user-attachments/assets/97c940d7-0f63-492d-ba91-2304429422c8" controls muted loop width="240"></video> | <video src="https://github.com/user-attachments/assets/585784e8-c0b4-48a7-8912-483bdaa61f01" controls muted loop width="240"></video> | <video src="https://github.com/user-attachments/assets/6fab7299-0e81-4f54-b57e-12a17998e473" controls muted loop width="240"></video> |
 
 Recorded on the iPhone 17 simulator with `make record-demo`. The three demo
 clips are driven by recording-only UI tests (see
