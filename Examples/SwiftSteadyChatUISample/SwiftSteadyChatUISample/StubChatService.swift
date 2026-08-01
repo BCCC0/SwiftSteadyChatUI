@@ -127,6 +127,6 @@ public final class StubChatService: ChatService {
         "I see what you mean. The push-up automation uses two mechanisms: the `keyboardLayoutGuide` for the input bar and `contentInset.bottom` for the scroll view.",
         "Let me explain the architecture in more detail:\n\n```swift\n// The input bar is pinned to the keyboard guide\ninputBar.bottomAnchor.constraint(\n    equalTo: view.keyboardLayoutGuide.topAnchor\n)\n```\n\nThis means UIKit handles all keyboard animation automatically.",
         "Here's a short one.",
-        "OK, let's think through this systematically. First, the problem: SwiftUI keyboard avoidance resizes the chat container. Second, the solution: move keyboard ownership to UIKit. Third, the result: stable frame, reliable near-bottom math.",
+        "OK, let's think through this systematically. First, the problem: SwiftUI keyboard avoidance resizes the chat container. Second, the solution: move keyboard ownership to UIKit. Third, the result: stable frame, reliable near-bottom math."
     ]
 }
