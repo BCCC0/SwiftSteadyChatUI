@@ -286,9 +286,11 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
         if let existing = hostingControllers[message.id] {
             return existing
         }
-        let host = UIHostingController(rootView: MessageBubbleView(message: message, onLayoutChange: { [weak self] in
-            self?.onBubbleHeightChanged()
-        }))
+        let host = UIHostingController(rootView: MessageBubbleView(
+            message: message,
+            onLayoutChange: { [weak self] in self?.onBubbleHeightChanged() },
+            onStreamingHeightChange: { [weak self] _ in self?.onBubbleHeightChanged() }
+        ))
         host.sizingOptions = .intrinsicContentSize
         host.view.translatesAutoresizingMaskIntoConstraints = false
         host.view.backgroundColor = .clear

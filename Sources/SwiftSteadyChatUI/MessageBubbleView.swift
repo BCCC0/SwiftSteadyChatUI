@@ -10,11 +10,15 @@ public struct MessageBubbleView: View {
     /// height (a thinking block expands/collapses), so the hosting controller
     /// can re-measure the cell. Nil for static bubbles.
     internal let onLayoutChange: (() -> Void)?
+    /// Called when a streaming block's RENDERED height changes (content grew) —
+    /// the change-driven streaming re-measure trigger.
+    internal let onStreamingHeightChange: ((CGFloat) -> Void)?
 
-    public init(message: StreamingMessage, isInline: Bool = false, onLayoutChange: (() -> Void)? = nil) {
+    public init(message: StreamingMessage, isInline: Bool = false, onLayoutChange: (() -> Void)? = nil, onStreamingHeightChange: ((CGFloat) -> Void)? = nil) {
         self.message = message
         self.isInline = isInline
         self.onLayoutChange = onLayoutChange
+        self.onStreamingHeightChange = onStreamingHeightChange
     }
 
     public var body: some View {
@@ -25,7 +29,7 @@ public struct MessageBubbleView: View {
 
             VStack(alignment: .trailing, spacing: 4) {
                 ForEach(message.blocks) { block in
-                    MessageBlockBubble(block: block, onLayoutChange: onLayoutChange)
+                    MessageBlockBubble(block: block, onLayoutChange: onLayoutChange, onStreamingHeightChange: onStreamingHeightChange)
                 }
             }
 
@@ -56,12 +60,16 @@ internal struct MessageBlockBubble: View {
     /// Notifies the hosting controller to re-measure after an expand/collapse
     /// changes this bubble's intrinsic height.
     let onLayoutChange: (() -> Void)?
+    /// Notifies the hosting controller when a streaming block's rendered height
+    /// changed (the change-driven streaming re-measure trigger).
+    let onStreamingHeightChange: ((CGFloat) -> Void)?
 
     @State private var thinkingExpanded = false
 
-    init(block: StreamingMessage.MessageBlock, onLayoutChange: (() -> Void)? = nil) {
+    init(block: StreamingMessage.MessageBlock, onLayoutChange: (() -> Void)? = nil, onStreamingHeightChange: ((CGFloat) -> Void)? = nil) {
         self.block = block
         self.onLayoutChange = onLayoutChange
+        self.onStreamingHeightChange = onStreamingHeightChange
     }
 
     var body: some View {
@@ -153,8 +161,10 @@ internal struct MessageBlockBubble: View {
             MarkdownView(text: block.content ?? "")
                 .transition(.identity)
         } else if let source = block.streamSource {
-            StreamedMarkdownView(source: source)
-                .transition(.identity)
+            RenderedHeightObserver(content: StreamedMarkdownView(source: source)) { h in
+                onStreamingHeightChange?(h)
+            }
+            .transition(.identity)
         } else {
             HStack {
                 Text("Thinking...")
@@ -183,7 +193,9 @@ internal struct MessageBlockBubble: View {
         if block.isStreamFinished {
             MarkdownView(text: block.content ?? "")
         } else if let source = block.streamSource {
-            StreamedMarkdownView(source: source)
+            RenderedHeightObserver(content: StreamedMarkdownView(source: source)) { h in
+                onStreamingHeightChange?(h)
+            }
         } else {
             // Empty placeholder while waiting for the reply to start.
             Text("")
