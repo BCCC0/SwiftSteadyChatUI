@@ -1,12 +1,10 @@
 name: CI
 
-# Runs only on release: a version-tag push (e.g. `v0.1.0`) or a published
-# GitHub Release. Not on every push to main — this is the gate that guards a
-# tagged release, and it's what the pre-push hook runs locally too.
+# Runs only when a GitHub Release is published (the `v*` tag is the source).
+# Not on every push to main, and not on tag pushes alone — publishing the
+# Release is what gates the CI. This is the gate that guards a tagged release,
+# and it's what the pre-push hook runs locally too.
 on:
-  push:
-    tags:
-      - 'v*'
   release:
     types:
       - published

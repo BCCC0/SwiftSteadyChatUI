@@ -13,7 +13,13 @@ final class CacheEvictionTests {
     /// the visible rect) is only meaningful window-hosted: off-screen the
     /// bounds are zero-width, every finished controller is evicted, and the
     /// bounded-cache assertion passes vacuously.
-    private var windows: [UIWindow] = []
+    ///
+    /// Static (process-lifetime) store, not per-test: a UIWindow torn down
+    /// while UIKit still holds a weak ref to it crashes with "Cannot form weak
+    /// reference to instance of class UIWindow ... over-released" — a CI-only
+    /// flake. Windows are never deallocated during the run, so there is no
+    /// over-release regardless of test scheduling.
+    private static var windows: [UIWindow] = []
 
     final class StubService: ChatService {
         var messages: [StreamingMessage]
@@ -43,7 +49,7 @@ final class CacheEvictionTests {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = vc
         window.makeKeyAndVisible()
-        windows.append(window)  // keep the window (and the view hierarchy) alive
+        Self.windows.append(window)  // process-lifetime: never deallocated mid-run
         _ = vc.view
         return vc
     }

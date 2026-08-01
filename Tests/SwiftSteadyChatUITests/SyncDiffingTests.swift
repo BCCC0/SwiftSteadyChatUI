@@ -13,7 +13,9 @@ final class SyncDiffingTests {
     /// Retains the windows hosting each test's controller so the collection
     /// view is actually on screen (batch updates commit like production, and
     /// the settle loop's re-measure stays consistent with the data source).
-    private var windows: [UIWindow] = []
+    /// Static (process-lifetime) store — see CacheEvictionTests for why: a
+    /// UIWindow deallocated while UIKit holds a weak ref crashes the process.
+    private static var windows: [UIWindow] = []
 
     final class Stub: ChatService {
         var messages: [StreamingMessage] = []
@@ -30,7 +32,7 @@ final class SyncDiffingTests {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = vc
         window.makeKeyAndVisible()
-        windows.append(window)  // keep the window (and the view hierarchy) alive
+        Self.windows.append(window)  // process-lifetime: never deallocated mid-run
         _ = vc.view
         return vc
     }
