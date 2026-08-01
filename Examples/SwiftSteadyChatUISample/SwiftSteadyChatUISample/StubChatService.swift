@@ -36,6 +36,29 @@ public final class StubChatService: ChatService {
     the streaming render path for a few seconds.
     """
 
+    /// A genuinely huge markdown reply for stress-demoing the streaming render
+    /// path (`--longest-reply`). Built programmatically so we don't bloat the
+    /// source with a literal: ~48k chars across many paragraphs, lists, code
+    /// blocks, headings, and a table. At 20ms/char this streams for ~16 minutes,
+    /// but the point is to watch render cost grow as the document does.
+    public static var longestStreamingReply: String {
+        var out = "# Streaming Stress Test\n\n"
+        for section in 0..<160 {
+            out += "## Section \(section)\n\n"
+            out += "This is paragraph one of section \(section). It contains enough "
+            out += "prose to force the bubble to wrap and re-measure as the document "
+            out += "grows, exercising the incremental render path.\n\n"
+            out += "Paragraph two **with bold** and `inline code` and a [link](https://example.com) "
+            out += "plus some *emphasis* to vary the inline styling.\n\n"
+            out += "* bullet one\n* bullet two\n* bullet three\n\n"
+            out += "```swift\nfunc render(_ section: Int) -> String {\n"
+            out += "    return \"section \\(section) code block\"\n}\n```\n\n"
+        }
+        out += "| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |\n\n"
+        out += "## Finale\n\nA closing paragraph to end the document.\n"
+        return out
+    }
+
     /// Pre-fill messages for testing (avoids slow UI-based seeding).
     public func seedMessages(count: Int) {
         for i in 0..<count {
@@ -83,7 +106,7 @@ public final class StubChatService: ChatService {
         for ch in reply {
             accumulated.append(ch)
             source.yield(accumulated)
-            try? await Task.sleep(for: .milliseconds(20))
+            try? await Task.sleep(for: .milliseconds(charDelayMs))
         }
         source.finish()
         isStreaming = false
@@ -108,9 +131,18 @@ public final class StubChatService: ChatService {
     /// - `--seed-messages N` → pre-fill N user/assistant pairs for UI tests.
     static func createWithArgs() -> StubChatService {
         let args = ProcessInfo.processInfo.arguments
-        let service = args.contains("--long-reply")
-            ? StubChatService(responsePool: [StubChatService.longStreamingReply])
-            : StubChatService()
+        let service: StubChatService
+        if args.contains("--longest-reply") {
+            // ~48k chars at 1ms/char ≈ 48s. At that pace the markdown re-parse
+            // (which grows with document size) outruns the 1ms yield — so the
+            // bubble visibly falls behind the stream, demonstrating the
+            // full-re-parse cost scaling. Use this for the stress demo.
+            service = StubChatService(responsePool: [StubChatService.longestStreamingReply], charDelayMs: 1)
+        } else if args.contains("--long-reply") {
+            service = StubChatService(responsePool: [StubChatService.longStreamingReply])
+        } else {
+            service = StubChatService()
+        }
         if let idx = args.firstIndex(of: "--seed-messages"),
            let countStr = args.dropFirst(idx + 1).first,
            let count = Int(countStr) {
