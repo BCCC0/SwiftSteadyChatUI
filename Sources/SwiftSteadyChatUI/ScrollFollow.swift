@@ -43,10 +43,13 @@ extension ChatCollectionViewController {
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
         updateFABVisibility()
-        // Only count user-driven scrolls (drag/decelerate), not our own
-        // programmatic scrollToBottom calls.
-        if scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating {
-            userScrolled = true
-        }
+        let isInteracting = scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
+        followState = FollowState.transition(current: followState, isInteracting: isInteracting, isNearBottom: isNearBottom())
+    }
+
+    /// The follow is broken INSTANTLY on any user drag (before the first scroll
+    /// tick), so a gesture is never fought by the auto-scroll.
+    public func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        followState = .brokenByGesture
     }
 }

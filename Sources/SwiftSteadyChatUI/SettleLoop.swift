@@ -63,14 +63,9 @@ extension ChatCollectionViewController {
             lastContentHeight = current
         }
 
-        // Follow the bottom while the user isn't actively interacting (tracking/
-        // dragging/decelerating) and is at the bottom or hasn't scrolled away —
-        // so a drag is never fought by the auto-follow (which otherwise reset the
-        // offset every tick and welded the view to the bottom during streaming),
-        // and a released scroll near the bottom resumes anchoring the stream.
-        let isUserInteracting = collectionView.isTracking || collectionView.isDragging || collectionView.isDecelerating
-        let shouldFollowBottom = !isUserInteracting && (!userScrolled || isNearBottom())
-        if shouldFollowBottom { scrollToBottom(animated: false) }
+        // Follow the bottom only when the state machine says so (at the bottom,
+        // not mid-gesture). A gesture breaks it instantly (scrollViewDidScroll).
+        if shouldFollow { scrollToBottom(animated: false) }
 
         // Only stop once the offset has actually reached the bottom target and
         // the content size is stable — otherwise a late topInset drop can leave
@@ -90,7 +85,7 @@ extension ChatCollectionViewController {
         // stop anyway — otherwise the CADisplayLink spins at 60fps forever on a
         // static screen, re-measuring + evicting with no work to do.
         let stableAndDone = stableTicks >= config.settleStableTicks && !isStreaming
-        let canStop = atTarget || !shouldFollowBottom
+        let canStop = atTarget || !shouldFollow
         if settleTicks > config.settleMaxTicks, stableAndDone, canStop {
             stopSettleLink()
         }

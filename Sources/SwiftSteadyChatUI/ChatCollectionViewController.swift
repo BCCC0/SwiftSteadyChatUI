@@ -42,8 +42,11 @@ public final class ChatCollectionViewController: UIViewController {
     /// The message currently streaming; used to keep the settle loop alive.
     internal var activeStreamingID: UUID?
     private var initialScrollDone = false
-    /// True once the user drags the collection view (stops auto-follow-bottom).
-    internal var userScrolled = false
+
+    /// Whether the chat auto-scrolls to the bottom on content growth. Starts
+    /// following (the initial load lands at the bottom).
+    internal var followState: FollowState = .following
+    internal var shouldFollow: Bool { followState == .following }
 
     public init(service: any ChatService, config: ChatUIConfig = .init()) {
         self.service = service
