@@ -135,6 +135,12 @@ private extension ChatCollectionViewController {
             finishLayoutPass(preserveBottom: wasNearBottom)
         }
         updateStreamingState()
+        if delta <= 0 {
+            // Delete/regenerate: drop cached controllers whose message no
+            // longer exists (deletion) or whose finished cell scrolled out of
+            // the eviction window (regeneration re-creates fresh on next view).
+            evictCachedControllers()
+        }
     }
 
     func finishLayoutPass(preserveBottom: Bool) {
@@ -301,5 +307,88 @@ private extension ChatCollectionViewController {
 extension ChatCollectionViewController: UIGestureRecognizerDelegate {
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         !(touch.view is UIControl)
+    }
+}
+
+// MARK: - Debug hooks (test-visible, not API)
+
+extension ChatCollectionViewController {
+
+    /// Force-populate the hosting-controller cache for every message.
+    /// Test-only; real population happens lazily via cell/measure calls.
+    internal func debugWarmCacheForAllMessages() {
+        for message in messages {
+            _ = hostingController(for: message)
+        }
+    }
+
+    /// Number of hosting controllers currently cached.
+    internal var debugCachedControllerCount: Int {
+        hostingControllers.count
+    }
+
+    /// Run one settle pass (the same work a display-link tick performs) so a
+    /// test can drive layout + eviction deterministically without a run loop.
+    internal func debugCompleteSettle() {
+        settleTick()
+        evictCachedControllers()
+    }
+}
+
+// MARK: - Cache eviction (bounded cache)
+
+extension ChatCollectionViewController {
+
+    /// Bounded-cache eviction: runs on every settle tick and after
+    /// delete/regenerate syncs so the hosting-controller cache cannot grow
+    /// without bound over a long chat.
+    ///
+    /// Eviction window: a controller is evicted only when its message is fully
+    /// finished streaming AND its cell frame lies outside a window around the
+    /// visible bounds (`collectionView.bounds.insetBy(dx: 0, dy: -2000)`, i.e.
+    /// ±2000 pt above/below the visible rect). The generous window preserves
+    /// the no-flicker invariant:
+    ///   - every visible cell's controller is retained (a visible cell's frame
+    ///     is always inside the window);
+    ///   - a streaming message is never evicted regardless of position (its
+    ///     StreamedMarkdownView would lose its iterator and the in-place
+    ///     re-render would restart mid-stream).
+    /// When a cell's frame can't be determined (layout not yet computed) we
+    /// keep the controller — the next settle tick re-evaluates with fresh
+    /// layout attributes.
+    ///
+    /// Deletion/regeneration: any cached id no longer present in `messages`
+    /// is always evicted, regardless of stream state.
+    internal func evictCachedControllers() {
+        // 1. Deletion/regeneration: evict ids no longer in the message list.
+        let liveIDs = Set(messages.map(\.id))
+        let staleIDs = hostingControllers.keys.filter { !liveIDs.contains($0) }
+        for id in staleIDs {
+            evict(id)
+        }
+
+        // 2. Finished messages whose cell frame is outside the visible window.
+        let visibleWindow = collectionView.bounds.insetBy(dx: 0, dy: -2000)
+        let offWindowIDs = hostingControllers.keys.filter { id in
+            guard let message = messages.first(where: { $0.id == id }) else { return false }
+            guard message.isStreamFinished else { return false }
+            guard let index = messages.firstIndex(where: { $0.id == id }),
+                  let frame = collectionView.layoutAttributesForItem(at: IndexPath(item: index, section: 0))?.frame
+            else {
+                return false // unknown frame — keep (conservative, no-flicker)
+            }
+            return !frame.intersects(visibleWindow)
+        }
+        for id in offWindowIDs {
+            evict(id)
+        }
+    }
+
+    /// Remove a cached controller and detach its hosted view from any cell
+    /// still hosting it, so a recycled cell never holds a strong reference to
+    /// an evicted controller. No-op when the id isn't cached.
+    private func evict(_ id: UUID) {
+        guard let host = hostingControllers.removeValue(forKey: id) else { return }
+        host.view.removeFromSuperview()
     }
 }

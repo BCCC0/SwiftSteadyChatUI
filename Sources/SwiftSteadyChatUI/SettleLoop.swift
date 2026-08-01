@@ -65,5 +65,9 @@ extension ChatCollectionViewController {
         if settleTicks > config.settleMaxTicks, stableTicks >= config.settleStableTicks, atTarget, !isStreaming {
             stopSettleLink()
         }
+        // Bound the cache every tick: finished messages whose cell has scrolled
+        // out of the eviction window release their hosting controller (see
+        // evictCachedControllers for the window + no-flicker guards).
+        evictCachedControllers()
     }
 }
