@@ -20,10 +20,12 @@ public struct StreamingMessage: Identifiable, Equatable, Sendable, Codable {
     public var isUser: Bool { role == .user }
 
     /// Every block finished ⟺ the message finished (drives eviction/settle).
-    public var isStreamFinished: Bool { blocks.allSatisfy(\.isStreamFinished) }
+    /// A `.user` block is always finished (instant, never streams).
+    public var isStreamFinished: Bool { blocks.allSatisfy { $0.kind == .user || $0.isStreamFinished } }
 
-    /// True while any block is still streaming (drives the settle loop).
-    public var isStreaming: Bool { blocks.contains { !$0.isStreamFinished } }
+    /// A reply-class block still streaming (drives the settle loop). A
+    /// `.user` block never counts as streaming.
+    public var isStreaming: Bool { blocks.contains { $0.kind != .user && !$0.isStreamFinished } }
 
     public enum MessageRole: Equatable, Sendable {
         case user

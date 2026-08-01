@@ -94,6 +94,11 @@ internal struct MessageBlockBubble: View {
                     Text("Show thinking")
                         .font(.caption2)
                     Spacer()
+                    // Renders only on re-created controllers: the cached
+                    // rootView is frozen, so a live finished message keeps
+                    // this block's isStreamFinished false (streamed view shows
+                    // the final text instead). On reload / post-eviction
+                    // scroll-back the caption appears.
                     if block.isStreamFinished {
                         Text("Done thinking")
                             .font(.caption2)

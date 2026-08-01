@@ -34,6 +34,15 @@ struct MessageBlockTests {
         #expect(!m.isUser)
     }
 
+    @Test("a .user block is always finished even without isStreamFinished (natural init)")
+    func userBlockIsAlwaysFinished() {
+        let m = StreamingMessage(id: UUID(), blocks: [
+            .init(kind: .user, content: "hi")   // default isStreamFinished: false
+        ])
+        #expect(m.isStreamFinished)
+        #expect(!m.isStreaming)
+    }
+
     @Test("message-level isStreamFinished requires every block finished")
     func messageFinishedDerivation() {
         let live = reply([
@@ -63,10 +72,11 @@ struct MessageBlockTests {
 
     @Test("blocks are not equal when kind/content/finish differ")
     func equatableDistinguishesData() {
-        let a = StreamingMessage.MessageBlock(kind: .reply, content: "hi", isStreamFinished: true)
-        #expect(a != .init(kind: .thinking, content: "hi", isStreamFinished: true))
-        #expect(a != .init(kind: .reply, content: "bye", isStreamFinished: true))
-        #expect(a != .init(kind: .reply, content: "hi", isStreamFinished: false))
+        let id = UUID()
+        let a = StreamingMessage.MessageBlock(id: id, kind: .reply, content: "hi", isStreamFinished: true)
+        #expect(a != StreamingMessage.MessageBlock(id: id, kind: .thinking, content: "hi", isStreamFinished: true))
+        #expect(a != StreamingMessage.MessageBlock(id: id, kind: .reply, content: "bye", isStreamFinished: true))
+        #expect(a != StreamingMessage.MessageBlock(id: id, kind: .reply, content: "hi", isStreamFinished: false))
     }
 
     @Test("Codable round-trip drops streamSource; content/kind/isStreamFinished survive")
