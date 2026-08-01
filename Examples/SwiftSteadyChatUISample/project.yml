@@ -47,6 +47,22 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.steadychatui.sampleuitests
         GENERATE_INFOPLIST_FILE: YES
 
+  # Recording-only demo bundle. NOT part of the SwiftSteadyChatUISample scheme's
+  # test action, so the normal suite stays exactly the 12 real tests. These demos
+  # are pacing vehicles for video production (see scripts/record-demo.sh).
+  SwiftSteadyChatUISampleDemoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: SwiftSteadyChatUISampleDemoUITests
+    dependencies:
+      - target: SwiftSteadyChatUISample
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.steadychatui.sampledemouitests
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   SwiftSteadyChatUISample:
     build:
@@ -60,3 +76,13 @@ schemes:
         - SwiftSteadyChatUISampleUITests
     archive:
       config: Release
+
+  # Scheme for the recording-only demo tests (used by scripts/record-demo.sh).
+  SwiftSteadyChatUISampleDemo:
+    build:
+      targets:
+        SwiftSteadyChatUISample: all
+    test:
+      config: Debug
+      targets:
+        - SwiftSteadyChatUISampleDemoUITests

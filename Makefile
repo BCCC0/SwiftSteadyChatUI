@@ -41,6 +41,10 @@ build-sample: generate-sample-project ## Generate and build the sample app.
 		-skipMacroValidation \
 		CODE_SIGNING_ALLOWED=NO
 
+.PHONY: record-demo
+record-demo: ## Record the three demo videos (see scripts/record-demo.sh).
+	@./scripts/record-demo.sh
+
 .PHONY: lint
 lint: ## Run SwiftLint in strict mode.
 	@swiftlint --strict
