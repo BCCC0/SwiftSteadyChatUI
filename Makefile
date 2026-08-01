@@ -22,6 +22,14 @@ resolve: ## Resolve Swift package dependencies.
 generate-sample-project: ## Generate the sample app Xcode project.
 	@command -v "$(XCODEGEN)" >/dev/null || { echo "error: xcodegen not found. Install it with 'brew install xcodegen'."; exit 1; }
 	@"$(XCODEGEN)" generate --spec "$(SAMPLE_SPEC)" --project "$(SAMPLE_DIR)"
+	@# xcodegen cannot emit `useSwiftTesting = "YES"` in the generated scheme's
+	@# TestAction (it is a known xcodegen gap). The sample UI suite is pure XCTest
+	@# and passes either way, but inject the attribute so the generated scheme
+	@# matches the committed one and keeps Swift Testing parity for the package.
+	@SAMPLE_SCHEME_FILE="$(SAMPLE_PROJECT)/xcshareddata/xcschemes/$(SAMPLE_SCHEME).xcscheme"; \
+	if ! grep -q 'useSwiftTesting' "$$SAMPLE_SCHEME_FILE"; then \
+		sed -i '' -e '/<TestAction/,/onlyGenerateCoverageForSpecifiedTargets/ s/shouldUseLaunchSchemeArgsEnv = "YES"/shouldUseLaunchSchemeArgsEnv = "YES"\n      useSwiftTesting = "YES"/' "$$SAMPLE_SCHEME_FILE"; \
+	fi
 
 .PHONY: build-sample
 build-sample: generate-sample-project ## Generate and build the sample app.
@@ -33,12 +41,19 @@ build-sample: generate-sample-project ## Generate and build the sample app.
 		-skipMacroValidation \
 		CODE_SIGNING_ALLOWED=NO
 
+.PHONY: lint
+lint: ## Run SwiftLint in strict mode.
+	@swiftlint --strict
+
 .PHONY: test
 test: ## Run package unit tests on the iOS simulator.
 	@xcodebuild test \
 		-scheme "$(PACKAGE_SCHEME)" \
 		-destination "$(IOS_DESTINATION)" \
 		-skipMacroValidation
+
+.PHONY: ci
+ci: lint test build-sample ## Run the same checks as CI (lint, unit tests, sample build).
 
 .PHONY: clean
 clean: ## Remove local SwiftPM build products.

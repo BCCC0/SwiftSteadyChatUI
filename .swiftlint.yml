@@ -1,0 +1,100 @@
+# SwiftLint configuration for SwiftSteadyChatUI.
+# Adapted from SwiftStreamingMarkdown's .swiftlint.yml. The Microsoft
+# `file_header` rule is intentionally dropped (this package has no header
+# requirement), and `force_cast`/`force_unwrapping` are relaxed because the
+# ported controller and the demo/tests use a couple of intentional force-casts
+# and force-unwraps that are out of scope for this packaging milestone.
+disabled_rules:
+  - todo
+  - line_length
+  - nesting
+  - cyclomatic_complexity
+  - non_optional_string_data_conversion
+  - type_body_length
+  - blanket_disable_command
+  - superfluous_disable_command
+  - force_cast            # one intentional `as!` in the ported hosting controller
+opt_in_rules:
+  - empty_count
+  - force_try
+
+analyzer_rules:
+  - explicit_self
+
+included:
+  - Sources
+  - Tests
+  - Examples
+excluded:
+  - "**/.build/**"
+  - "**/.swiftpm/**"
+  - "**/Generated/**"
+  - "**/*.xcassets"
+  - "**/*.bundle"
+
+allow_zero_lintable_files: false
+strict: true
+
+force_try:
+  severity: error
+function_body_length: 200
+
+file_length:
+  - 900 # error
+
+type_name:
+  min_length: 3 # error
+  max_length: 50 # error
+  excluded: iPhone
+  allowed_symbols: ["_"]
+
+identifier_name:
+  min_length: 1 # error
+
+reporter: emoji
+
+function_parameter_count:
+  warning: 8
+  error: 8
+
+custom_rules:
+  no_any:
+    name: "Disallow Any"
+    regex: "\\bAny(?!])\\b"
+    message: "freestanding 'Any' is not allowed, please use as? (optional downcasting) to an explicit type"
+    severity: error
+  no_empty_else:
+    name: "No Empty Else"
+    regex: 'else\s*\{\s*\}'
+    message: "Empty else block is not allowed, please handle the else case or remove the else block"
+    severity: error
+  no_anyview:
+    name: "No AnyView"
+    regex: "\\bAnyView(?!])\\b"
+    excluded:
+      - ".*Previews\\.swift"
+      - ".*Test\\.swift"
+      - ".*Tests\\.swift"
+    message: "Use of AnyView is discouraged. Here's a good explanatory article on it: https://www.swiftbysundell.com/articles/avoiding-anyview-in-swiftui/"
+    severity: error
+  no_print:
+    name: "No print"
+    regex: "\\bprint(?!])\\b"
+    excluded:
+      - ".*View\\.swift"
+      - ".*Previews\\.swift"
+      - ".*Mocks\\.swift"
+      - ".*Mock\\.swift"
+      - ".*Mock.*\\.swift"
+      - ".*Test\\.swift"
+      - ".*Tests\\.swift"
+      - ".*Listener\\.swift"
+      - ".*Stub.*\\.swift"
+      - ".*Base\\.swift"
+    message: "Prefer logDebug() over print() to obtain structured messages sent to Apple's unified logging system. Mocks, Preview, UI-test helpers and Tests are not subject to this rule."
+    severity: error
+  no_swiftuicore_import:
+    name: "No SwiftUICore Import"
+    regex: 'import SwiftUICore'
+    message: "Importing SwiftUICore is not allowed. Please use SwiftUI instead."
+    severity: error
