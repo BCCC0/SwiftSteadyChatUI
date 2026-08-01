@@ -9,6 +9,19 @@ public final class StubChatService: ChatService {
     public private(set) var isStreaming = false
     public var onMessagesChanged: (() -> Void)?
 
+    /// When true, `sendMessage` streams a `.thinking` block before the reply
+    /// (launch arg `--thinking-reply`). Demonstrates the streamed-thinking fix.
+    public var streamsThinking = false
+
+    /// Deterministic thinking text — streams before the reply under
+    /// `--thinking-reply`. The UI test waits for the "Let me reason" prefix.
+    public static let thinkingText = """
+    Let me reason through this.
+
+    The user sent a prompt, so I need to figure out what they actually want,
+    weigh the constraints, and only then produce the final reply.
+    """
+
     private let responsePool: [String]
     private let charDelayMs: UInt64
 
@@ -84,36 +97,56 @@ public final class StubChatService: ChatService {
             .init(kind: .user, content: text, isStreamFinished: true)
         ]))
         onMessagesChanged?()
-
-        // Brief pause before assistant responds
         try? await Task.sleep(for: .milliseconds(50))
 
-        // 2. Reply (Class 2) — one streaming reply block
+        // 2. Reply (Class 2) — optional thinking block + reply block, each streaming
         let reply = responsePool.randomElement()!
+        let thinkingSource = streamsThinking ? ChatStreamSource() : nil
         let replySource = ChatStreamSource()
         let msgID = UUID()
-        messages.append(StreamingMessage(id: msgID, blocks: [
-            .init(kind: .reply, content: "", streamSource: replySource, isStreamFinished: false)
-        ]))
+        var blocks: [StreamingMessage.MessageBlock] = []
+        if let thinkingSource {
+            blocks.append(.init(kind: .thinking, content: "", streamSource: thinkingSource, isStreamFinished: false))
+        }
+        blocks.append(.init(kind: .reply, content: "", streamSource: replySource, isStreamFinished: false))
+        messages.append(StreamingMessage(id: msgID, blocks: blocks))
         onMessagesChanged?()
 
-        // 3. Stream reply character-by-character so the animation is visible.
         isStreaming = true
-        var accumulated = ""
+        defer { isStreaming = false }
+
+        // 3. Stream thinking first (full snapshots), then the reply.
+        if let thinkingSource {
+            var acc = ""
+            for ch in StubChatService.thinkingText {
+                acc.append(ch)
+                thinkingSource.yield(acc)
+                try? await Task.sleep(for: .milliseconds(charDelayMs))
+            }
+            thinkingSource.finish()
+        }
+
+        var acc = ""
         for ch in reply {
-            accumulated.append(ch)
-            replySource.yield(accumulated)
+            acc.append(ch)
+            replySource.yield(acc)
             try? await Task.sleep(for: .milliseconds(charDelayMs))
         }
         replySource.finish()
-        isStreaming = false
 
-        // 4. Replace with finished blocks — stored ⟹ finished; source kept alive
-        // so a kept controller's stream view shows the final text (no flash).
+        // 4. Replace with finished blocks — stored ⟹ finished; sources kept alive.
         guard let idx = messages.firstIndex(where: { $0.id == msgID }) else { return }
-        messages[idx] = StreamingMessage(id: msgID, blocks: [
-            .init(kind: .reply, content: reply, streamSource: replySource, isStreamFinished: true)
-        ])
+        var finished: [StreamingMessage.MessageBlock] = []
+        if let thinkingSource {
+            finished.append(.init(
+                kind: .thinking, content: StubChatService.thinkingText,
+                streamSource: thinkingSource, isStreamFinished: true
+            ))
+        }
+        finished.append(.init(
+            kind: .reply, content: reply, streamSource: replySource, isStreamFinished: true
+        ))
+        messages[idx] = StreamingMessage(id: msgID, blocks: finished)
         onMessagesChanged?()
     }
 
@@ -124,7 +157,10 @@ public final class StubChatService: ChatService {
     static func createWithArgs() -> StubChatService {
         let args = ProcessInfo.processInfo.arguments
         let service: StubChatService
-        if args.contains("--longest-reply") {
+        if args.contains("--thinking-reply") {
+            service = StubChatService(responsePool: [StubChatService.longStreamingReply])
+            service.streamsThinking = true
+        } else if args.contains("--longest-reply") {
             // ~48k chars at 1ms/char ≈ 48s. At that pace the markdown re-parse
             // (which grows with document size) outruns the 1ms yield — so the
             // bubble visibly falls behind the stream, demonstrating the
