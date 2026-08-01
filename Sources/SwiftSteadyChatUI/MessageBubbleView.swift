@@ -123,16 +123,32 @@ public struct MessageBubbleView: View {
 
     // MARK: - Reply Bubble
 
+    /// Test-visible (not API) AND the reply-bubble's single source of truth for
+    /// rendering strategy — `replyBubble` branches on it directly, so the hook
+    /// and the actual rendering can never drift apart.
+    ///
+    /// Finished messages render statically (`MarkdownView`). This MUST take
+    /// precedence over the stream branch: a re-created hosting controller
+    /// (cache eviction then scroll-back) builds a fresh `StreamedMarkdownView`,
+    /// but the message's `streamSource` AsyncStream is already exhausted, so a
+    /// live stream would consume nothing and render a blank bubble where
+    /// content used to be.
+    internal var usesStaticMarkdown: Bool {
+        if message.isStreamFinished { return true }
+        if message.streamSource != nil { return false }
+        return !message.content.isEmpty
+    }
+
     @ViewBuilder
     private var replyBubble: some View {
-        if let source = message.streamSource {
-            StreamedMarkdownView(source: source)
+        if usesStaticMarkdown {
+            MarkdownView(text: message.content)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
                 .background(Color.gray.opacity(0.2))
                 .clipShape(RoundedRectangle(cornerRadius: 18))
-        } else if !message.content.isEmpty {
-            MarkdownView(text: message.content)
+        } else if let source = message.streamSource {
+            StreamedMarkdownView(source: source)  // still streaming → keep the live stream
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
                 .background(Color.gray.opacity(0.2))

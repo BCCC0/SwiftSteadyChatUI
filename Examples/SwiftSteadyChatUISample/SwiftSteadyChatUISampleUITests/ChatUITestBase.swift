@@ -52,6 +52,26 @@ class ChatUITestBase: XCTestCase {
         return tv.frame.minY - 8
     }
 
+    /// Polls until at least `count` message bubbles exist in the accessibility
+    /// hierarchy. A send appends the user cell and starts the assistant reply
+    /// asynchronously; querying for the last message during that insert can
+    /// race cell reuse and throw "No matches found for Element at index N"
+    /// (flaky under load). Waiting for the count first lets the insert land, so
+    /// the layout-stability checks below never snapshot a half-built list.
+    /// Uses `.count` (not `.allElementsBoundByIndex`) so the poll itself cannot
+    /// trip the per-element index race.
+    @discardableResult
+    func waitForMessageCount(_ count: Int, timeout: TimeInterval = 30) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let userCount = app.descendants(matching: .any).matching(identifier: "user-msg").count
+            let assistantCount = app.descendants(matching: .any).matching(identifier: "assistant-msg").count
+            if userCount + assistantCount >= count { return true }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        return false
+    }
+
     /// Polls until the last message's bottom edge and the keyboard top are both
     /// stable across consecutive samples (animation/layout fully settled).
     @discardableResult

@@ -15,8 +15,16 @@ build/
 # SwiftPM
 /.build
 /Packages
-.swiftpm/
+.swiftpm/*
+!.swiftpm/xcode/
+.swiftpm/xcode/*
+!.swiftpm/xcode/xcshareddata/
 .swiftpm/xcode/package.xcworkspace/xcuserdata/
+
+# Note: the negations above keep `.swiftpm/xcode/xcshareddata/` trackable so
+# the committed shared package scheme (SwiftSteadyChatUI.xcscheme) is not
+# swallowed by the `.swiftpm/*` ignore. Without it CI's xcodebuild would
+# auto-generate a scheme and could silently run 0 Swift Testing tests.
 
 # xcodegen-generated sample project (regenerate with `make generate-sample-project`)
 *.xcodeproj/

@@ -38,7 +38,7 @@ Add the package to your app via Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/YOUR_ORG/SwiftSteadyChatUI", from: "1.0.0")
+    .package(url: "https://github.com/YOUR_ORG/SwiftSteadyChatUI", from: "0.1.0")
 ]
 ```
 

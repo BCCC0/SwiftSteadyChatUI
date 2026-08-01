@@ -4,7 +4,7 @@ import UIKit
 
 extension ChatCollectionViewController {
     func observeKeyboard() {
-        NotificationCenter.default.addObserver(
+        keyboardWillShowObserver = NotificationCenter.default.addObserver(
             forName: UIResponder.keyboardWillShowNotification,
             object: nil, queue: .main
         ) { [weak self] _ in

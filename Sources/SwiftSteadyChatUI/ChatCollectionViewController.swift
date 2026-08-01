@@ -24,6 +24,9 @@ public final class ChatCollectionViewController: UIViewController {
     internal let inputBar = ChatInputBar()
     private let scrollToBottomButton = ScrollToBottomButton()
     internal var keyboardObserver: NSObjectProtocol?
+    /// Token for the keyboardWillShow observer — stored so it can be removed
+    /// in deinit alongside `keyboardObserver` (keyboardWillChangeFrame).
+    internal var keyboardWillShowObserver: NSObjectProtocol?
     internal var settleLink: CADisplayLink?
     internal var settleTicks = 0
     internal var stableTicks = 0
@@ -95,6 +98,7 @@ public final class ChatCollectionViewController: UIViewController {
 
     deinit {
         if let ob = keyboardObserver { NotificationCenter.default.removeObserver(ob) }
+        if let ob = keyboardWillShowObserver { NotificationCenter.default.removeObserver(ob) }
         settleLink?.invalidate()
         settleLink = nil
     }
@@ -121,6 +125,12 @@ private extension ChatCollectionViewController {
         } else if delta < 0 {
             // Delete: remove the dropped items so the collection view's item
             // count stays consistent with the data source.
+            // NOTE: this assumes tail-only deletions — the dropped messages
+            // are `(messages.count..<oldCount)`, i.e. the trailing slice. The
+            // chat service contract (static mid-stream array, append-only
+            // conversation) guarantees this. A future non-tail shrink (e.g.
+            // mid-list removal) would need real index math to map the removed
+            // messages' positions to IndexPaths instead of assuming the tail.
             let indexPaths = (messages.count..<oldCount).map { IndexPath(item: $0, section: 0) }
             collectionView.performBatchUpdates {
                 collectionView.deleteItems(at: indexPaths)

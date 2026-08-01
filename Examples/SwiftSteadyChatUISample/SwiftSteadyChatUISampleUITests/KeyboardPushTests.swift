@@ -241,6 +241,13 @@ final class KeyboardPushTests: ChatUITestBase {
             tv.typeText("hello \(i)")
             app.buttons["send-button"].tap()
 
+            // Wait for the new user cell AND the assistant placeholder to land
+            // in the accessibility hierarchy before measuring. Querying during
+            // the insert can race cell reuse (flaky "No matches found for
+            // Element at index N" under load) — the count wait lets the insert
+            // settle first.
+            XCTAssertTrue(waitForMessageCount(i * 2, timeout: 30),
+                "Messages did not appear after prompt \(i)")
             XCTAssertTrue(waitForStableLayout(timeout: 30),
                 "Reply did not finish streaming after prompt \(i)")
             sleep(1)
