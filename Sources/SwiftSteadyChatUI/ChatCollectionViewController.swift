@@ -221,14 +221,17 @@ private extension ChatCollectionViewController {
         if preserveBottom { scrollToBottom(animated: false) }
     }
 
-    /// Track the streaming message and kick off the settle loop (any message
-    /// change can produce async content — MarkdownView parses, streamed text —
-    /// whose cell heights must be re-measured until the layout is stable).
     func updateStreamingState() {
         // A message is streaming while any reply-class block is unfinished. A
         // `.user` block is always finished, so only thinking/reply stream.
         activeStreamingID = messages.last(where: { $0.blocks.contains { $0.kind != .user && !$0.isStreamFinished } })?.id
-        scheduleSettle()
+        // The settle loop re-measures NON-streaming async content (initial load,
+        // static markdown parse on append, the finished message on finish).
+        // Streaming growth is driven change-driven by RenderedHeightObserver →
+        // onBubbleHeightChanged, so the loop must not spin during a stream.
+        if activeStreamingID == nil {
+            scheduleSettle()
+        }
     }
 }
 
