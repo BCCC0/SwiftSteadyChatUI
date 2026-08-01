@@ -34,8 +34,11 @@ build-sample: generate-sample-project ## Generate and build the sample app.
 		CODE_SIGNING_ALLOWED=NO
 
 .PHONY: test
-test: ## Run package unit tests.
-	@swift test
+test: ## Run package unit tests on the iOS simulator.
+	@xcodebuild test \
+		-scheme "$(PACKAGE_SCHEME)" \
+		-destination "$(IOS_DESTINATION)" \
+		-skipMacroValidation
 
 .PHONY: clean
 clean: ## Remove local SwiftPM build products.

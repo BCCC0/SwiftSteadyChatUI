@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
   name: "SwiftSteadyChatUI",
   defaultLocalization: "en",
-  platforms: [.iOS("18.0"), .macOS("14.0")],
+  platforms: [.iOS("18.0")],
   products: [
     .library(
       name: "SwiftSteadyChatUI",
