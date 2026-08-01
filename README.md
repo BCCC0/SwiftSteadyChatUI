@@ -21,7 +21,7 @@ Flicker-free streaming, correct keyboard handling, and grows-in-place — in act
 
 | Streaming long markdown reply | Keyboard push-up & dismiss | Scrolled away: no push-up |
 |---|---|---|
-| <video src="https://github.com/BCCC0/SwiftSteadyChatUI/raw/main/demo/demo1.mp4" controls muted loop width="240"></video> | <video src="https://github.com/BCCC0/SwiftSteadyChatUI/raw/main/demo/demo2.mp4" controls muted loop width="240"></video> | <video src="https://github.com/BCCC0/SwiftSteadyChatUI/raw/main/demo/demo3.mp4" controls muted loop width="240"></video> |
+| <video src="https://raw.githubusercontent.com/BCCC0/SwiftSteadyChatUI/main/demo/demo1.mp4" controls muted loop width="240"></video> | <video src="https://raw.githubusercontent.com/BCCC0/SwiftSteadyChatUI/main/demo/demo2.mp4" controls muted loop width="240"></video> | <video src="https://raw.githubusercontent.com/BCCC0/SwiftSteadyChatUI/main/demo/demo3.mp4" controls muted loop width="240"></video> |
 
 Recorded on the iPhone 17 simulator with `make record-demo`. The three demo
 clips are driven by recording-only UI tests (see
