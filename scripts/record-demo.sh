@@ -42,14 +42,14 @@ test_name_for() {
   esac
 }
 
-# Trim 2.5s of app-launch preamble and 1.5s of app-termination tail.
+# Trim 5s of app-launch preamble and 2s of app-termination tail.
 trim_video() {
   local src="$1" dst="$2"
   local dur
   dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$src")
   local end
-  end=$(awk -v d="$dur" -v t="1.5" 'BEGIN { print d - t }')
-  ffmpeg -y -v error -ss 2.5 -to "$end" -i "$src" -c copy "$dst"
+  end=$(awk -v d="$dur" -v t="2" 'BEGIN { print d - t }')
+  ffmpeg -y -v error -ss 5 -to "$end" -i "$src" -c copy "$dst"
 }
 
 build_once() {
