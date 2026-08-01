@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode / build artifacts
+xcuserdata/
+DerivedData/
+*.xcuserstate
+build/
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# SwiftPM
+/.build
+/Packages
+.swiftpm/
+.swiftpm/xcode/package.xcworkspace/xcuserdata/
+
+# xcodegen-generated sample project (regenerate with `make generate-sample-project`)
+*.xcodeproj/
+
+# Credentials
+.netrc
