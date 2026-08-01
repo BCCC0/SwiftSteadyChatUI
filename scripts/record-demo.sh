@@ -43,13 +43,18 @@ test_name_for() {
 }
 
 # Trim 5s of app-launch preamble and 2s of app-termination tail.
+# RE-ENCODE (not -c copy): simctl's H.264 has sparse keyframes, so a copy seek
+# snaps to the previous keyframe and the 5s/2s cut is mostly ignored. Seeking
+# before -i with a re-encode gives a frame-accurate trim.
 trim_video() {
   local src="$1" dst="$2"
   local dur
   dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$src")
   local end
   end=$(awk -v d="$dur" -v t="2" 'BEGIN { print d - t }')
-  ffmpeg -y -v error -ss 5 -to "$end" -i "$src" -c copy "$dst"
+  ffmpeg -y -v error -ss 5 -to "$end" -i "$src" \
+    -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p \
+    -c:a aac -b:a 128k "$dst"
 }
 
 build_once() {
