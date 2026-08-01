@@ -21,5 +21,8 @@ build/
 # xcodegen-generated sample project (regenerate with `make generate-sample-project`)
 *.xcodeproj/
 
+# Internal superpowers docs (never tracked; repo hooks also forbid docs/)
+/docs/
+
 # Credentials
 .netrc
