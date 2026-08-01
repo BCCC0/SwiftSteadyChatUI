@@ -2,7 +2,13 @@ import Testing
 import UIKit
 @testable import SwiftSteadyChatUI
 
+/// Serialized: these tests window-host controllers. Swift Testing otherwise
+/// runs @MainActor tests concurrently, and two window-hosting suites tearing
+/// their retained UIWindows down at once crashes the process ("Cannot form
+/// weak reference to instance of class UIWindow ... over-released") — a
+/// CI-only flake. Serializing makes window teardown deterministic.
 @MainActor
+@Suite(.serialized)
 final class SyncDiffingTests {
     /// Retains the windows hosting each test's controller so the collection
     /// view is actually on screen (batch updates commit like production, and

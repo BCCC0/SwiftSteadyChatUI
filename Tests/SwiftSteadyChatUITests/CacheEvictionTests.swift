@@ -3,7 +3,10 @@ import Foundation
 import UIKit
 @testable import SwiftSteadyChatUI
 
+/// Serialized: window-hosts controllers like SyncDiffingTests; concurrent
+/// teardown of retained UIWindows across suites crashes the process on CI.
 @MainActor
+@Suite(.serialized)
 final class CacheEvictionTests {
     /// Retains the windows hosting each test's controller so the collection
     /// view has a real on-screen bounds. The eviction window (±2000 pt around
