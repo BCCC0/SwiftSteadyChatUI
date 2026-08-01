@@ -34,6 +34,19 @@ targets:
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
 
+  SwiftSteadyChatUISampleUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: SwiftSteadyChatUISampleUITests
+    dependencies:
+      - target: SwiftSteadyChatUISample
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.steadychatui.sampleuitests
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   SwiftSteadyChatUISample:
     build:
@@ -43,5 +56,7 @@ schemes:
       config: Debug
     test:
       config: Debug
+      targets:
+        - SwiftSteadyChatUISampleUITests
     archive:
       config: Release
