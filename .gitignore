@@ -29,8 +29,10 @@ build/
 # xcodegen-generated sample project (regenerate with `make generate-sample-project`)
 *.xcodeproj/
 
-# Demo videos (regenerate with `./scripts/record-demo.sh`)
-/demo/
+# Demo videos (regenerate with `./scripts/record-demo.sh`). The final mp4s are
+# committed (README embeds them); only the raw recordings + trim temps are ignored.
+/demo/*
+!/demo/*.mp4
 
 # Internal superpowers docs + agent context (never tracked; repo hooks also forbid them)
 /docs/
