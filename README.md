@@ -13,7 +13,7 @@ streaming chat implementations.
 - iOS 18.0+
 - Swift Package Manager
 
-The UI layout is used in <https://github.com/BCCC0/SwiftTavern>.
+Built with this library: **[SwiftTavern](https://github.com/BCCC0/SwiftTavern)** — a native iOS LLM role-playing chat app.
 
 ## The three guarantees
 
