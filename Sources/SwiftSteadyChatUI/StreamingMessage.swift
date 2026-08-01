@@ -22,7 +22,7 @@ public struct StreamingMessage: Identifiable, Equatable, Sendable, Codable {
     /// Every block finished ⟺ the message finished (drives eviction/settle).
     public var isStreamFinished: Bool { blocks.allSatisfy(\.isStreamFinished) }
 
-    /// Any block still streaming (drives the settle loop).
+    /// True while any block is still streaming (drives the settle loop).
     public var isStreaming: Bool { blocks.contains { !$0.isStreamFinished } }
 
     public enum MessageRole: Equatable, Sendable {

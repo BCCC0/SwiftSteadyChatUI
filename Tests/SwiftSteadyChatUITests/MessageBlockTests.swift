@@ -28,7 +28,7 @@ struct MessageBlockTests {
     func replyRoleDerivation() {
         let m = reply([
             .init(kind: .thinking, content: "hmm", isStreamFinished: true),
-            .init(kind: .reply, content: "answer", isStreamFinished: true),
+            .init(kind: .reply, content: "answer", isStreamFinished: true)
         ])
         #expect(m.role == .assistant)
         #expect(!m.isUser)
@@ -38,14 +38,14 @@ struct MessageBlockTests {
     func messageFinishedDerivation() {
         let live = reply([
             .init(kind: .thinking, content: "hmm", isStreamFinished: true),
-            .init(kind: .reply, content: "", streamSource: ChatStreamSource(), isStreamFinished: false),
+            .init(kind: .reply, content: "", streamSource: ChatStreamSource(), isStreamFinished: false)
         ])
         #expect(!live.isStreamFinished)
         #expect(live.isStreaming)
 
         let done = reply([
             .init(kind: .thinking, content: "hmm", isStreamFinished: true),
-            .init(kind: .reply, content: "answer", isStreamFinished: true),
+            .init(kind: .reply, content: "answer", isStreamFinished: true)
         ])
         #expect(done.isStreamFinished)
         #expect(!done.isStreaming)
@@ -74,7 +74,7 @@ struct MessageBlockTests {
         let source = ChatStreamSource()
         let original = reply([
             .init(kind: .thinking, content: "hmm", streamSource: source, isStreamFinished: true),
-            .init(kind: .reply, content: "answer", isStreamFinished: true),
+            .init(kind: .reply, content: "answer", isStreamFinished: true)
         ])
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(StreamingMessage.self, from: data)
