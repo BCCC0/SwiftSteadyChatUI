@@ -50,7 +50,7 @@ Add the package to your app via Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/BCCC0/SwiftSteadyChatUI", from: "0.1.0")
+    .package(url: "https://github.com/BCCC0/SwiftSteadyChatUI", from: "0.2.0")
 ]
 ```
 
@@ -72,33 +72,47 @@ import SwiftUI
 final class MyChatService: ChatService {
     var messages: [StreamingMessage] = []
     var onMessagesChanged: (() -> Void)?
-    private let model: MyLLMModel   // your LLM client — streamReply yields text chunks
+    private let model: MyLLMModel   // streamThinking/streamReply yield text chunks
 
     func sendMessage(_ text: String) async {
-        messages.append(StreamingMessage(role: .user, content: text))
+        // 1. Instant user prompt (a single .user block — always finished).
+        messages.append(StreamingMessage(blocks: [
+            .init(kind: .user, content: text, isStreamFinished: true)
+        ]))
         onMessagesChanged?()
 
-        let source = ChatStreamSource()
+        // 2. Reply: thinking + reply blocks, each with its own stream.
+        let thinkingSource = ChatStreamSource()
+        let replySource = ChatStreamSource()
         let id = UUID()
-        messages.append(StreamingMessage(id: id, role: .assistant, content: "", streamSource: source))
+        messages.append(StreamingMessage(id: id, blocks: [
+            .init(kind: .thinking, content: "", streamSource: thinkingSource),
+            .init(kind: .reply, content: "", streamSource: replySource),
+        ]))
         onMessagesChanged?()
 
-        var accumulated = ""
-        for chunk in try await model.streamReply(to: text) {
-            accumulated += chunk
-            source.yield(accumulated)   // each yield passes the full accumulated text
+        // 3. Stream thinking, then the reply (full snapshots each yield).
+        var thinking = ""
+        for chunk in try await model.streamThinking(to: text) {
+            thinking += chunk
+            thinkingSource.yield(thinking)
         }
-        source.finish()
+        thinkingSource.finish()
 
-        // IMPORTANT: replace the streaming message with a FINISHED copy that
-        // keeps `streamSource` alive. The UI's cached bubble renders the final
-        // text statically once `isStreamFinished == true` — without this the
-        // settle loop never stops and the cache never evicts.
+        var reply = ""
+        for chunk in try await model.streamReply(to: text) {
+            reply += chunk
+            replySource.yield(reply)
+        }
+        replySource.finish()
+
+        // 4. Replace with FINISHED blocks (stored ⟹ finished; sources kept
+        // alive so a kept cached bubble renders the final text statically).
         guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
-        messages[idx] = StreamingMessage(
-            id: id, role: .assistant, content: accumulated,
-            streamSource: source, isStreamFinished: true
-        )
+        messages[idx] = StreamingMessage(id: id, blocks: [
+            .init(kind: .thinking, content: thinking, streamSource: thinkingSource, isStreamFinished: true),
+            .init(kind: .reply, content: reply, streamSource: replySource, isStreamFinished: true),
+        ])
         onMessagesChanged?()
     }
 }
@@ -115,16 +129,16 @@ struct ChatView: View {
 ```
 
 > **`ChatService` contract:**
-> 1. `messages` must stay *static mid-stream*. Text flows through each streaming
->    message's `ChatStreamSource` (see `StreamingMessage.streamSource`), and the
->    array is only ever *replaced* — never mutated in place — while a message is
->    streaming. This is what lets the collection view avoid reloading.
-> 2. A message's `content`/`thinking`/`role` must be **final at first render** —
+> 1. `messages` must stay *static mid-stream*. Text flows through each block's
+>    `ChatStreamSource` (see `MessageBlock.streamSource`), and the array is only
+>    ever *replaced* — never mutated in place — while a message is streaming.
+>    This is what lets the collection view avoid reloading.
+> 2. A message's blocks (`kind`/`content`/finish) are **final at first render** —
 >    the cached bubble captures the struct by value. All evolving text goes
->    through `streamSource`; when the stream ends, **replace** the message with a
->    finished copy (keeping `streamSource` alive, as in the example above). A
->    service that clears `streamSource` on finish will show a stale/empty bubble
->    until eviction re-creates it.
+>    through each block's `streamSource`; when a stream ends, **replace** the
+>    message with finished copies (keeping `streamSource` alive, as in the
+>    example above). Only finished blocks should be persisted (`stored ⟹
+>    finished`); `streamSource` is never encoded.
 
 ### Configuration
 
@@ -145,8 +159,10 @@ against — change them deliberately.
 - `ChatScreen` — SwiftUI wrapper (embed directly in a `View`).
 - `ChatCollectionViewController` — the underlying `UICollectionViewController`.
 - `ChatService` — the protocol to conform to.
-- `StreamingMessage` — the display model (`role`, `content`, `thinking`,
-  `streamSource`, `isStreamFinished`).
+- `StreamingMessage` — the display model (`id`, `blocks`, derived `role`).
+  `MessageBlock` (`kind`: `.thinking`/`.reply`/`.user`, `content`,
+  `streamSource`, `isStreamFinished`) is the unit of streaming; `BlockKind`
+  distinguishes the instant user prompt from the reply class.
 - `ChatStreamSource` — bridges an `AsyncStream<String>` to
   `StreamedMarkdownSource`.
 - `ChatUIConfig` — behavior/appearance configuration.
@@ -159,7 +175,8 @@ The sample app in `Examples/SwiftSteadyChatUISample/` is **built entirely from
 the public API** — it imports only `SwiftSteadyChatUI` and exercises the same
 `ChatService` seam, `ChatScreen` embedding, and `ChatUIConfig` you would use in
 your own app. It doubles as the host for the UI-test suite
-(12 UI tests covering keyboard push-up and streaming flicker). Regenerate it
+(13 UI tests covering keyboard push-up, streaming flicker, and streamed
+thinking). Regenerate it
 with `make generate-sample-project`.
 
 ## Development
@@ -167,7 +184,7 @@ with `make generate-sample-project`.
 ```sh
 make help                  # Show all targets
 make lint                  # SwiftLint (strict)
-make test                  # Package unit tests (41 Swift Testing tests)
+make test                  # Package unit tests (49 Swift Testing tests)
 make build-sample          # Generate + build the sample app
 make ci                    # lint + test + build-sample (same as CI)
 ```
