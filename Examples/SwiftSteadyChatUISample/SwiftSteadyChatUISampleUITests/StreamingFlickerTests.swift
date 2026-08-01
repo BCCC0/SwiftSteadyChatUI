@@ -178,4 +178,52 @@ final class StreamingFlickerTests: ChatUITestBase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5),
             "Keyboard did not dismiss after sending a prompt")
     }
+
+    /// The scroll view must remain scrollable while a reply is streaming — a
+    /// drag away from the bottom is not fought by the auto-follow (the settle
+    /// loop stops yanking while the user is interacting). A long seeded
+    /// conversation gives real content to scroll.
+    func testScrollableDuringStreaming() throws {
+        app.terminate()
+        app.launchArguments = ["--seed-messages", "8", "--long-reply"]
+        app.launch()
+
+        let tv = app.textViews["input-textview"]
+        XCTAssertTrue(tv.waitForExistence(timeout: 10))
+        tv.tap()
+        tv.typeText("hello")
+        app.buttons["send-button"].tap()
+
+        // Confirm the stream is mid-flight: the last message's height is growing.
+        Thread.sleep(forTimeInterval: 2)
+        guard let last = visibleMessages().last else { XCTFail("No messages"); return }
+        let h1 = last.frame.height
+        Thread.sleep(forTimeInterval: 0.5)
+        let h2 = last.frame.height
+        print(">>> stream-growing: last.height \(h1)→\(h2)")
+        XCTAssertGreaterThan(h2, h1, "Streaming reply is not growing — the swipe would not be mid-stream")
+
+        let screenHeight = app.frame.height
+        let beforeMaxY = last.frame.maxY
+        print(">>> pinned: last.maxY \(beforeMaxY) (screen \(screenHeight))")
+
+        // Touch-movement-DOWN swipe (finger 0.3 → 0.7): dragging the content
+        // down reveals the earlier messages and drags the streaming reply off
+        // the bottom of the screen — breaking the auto-follow.
+        scrollUpLargeAmount()
+
+        // The auto-follow must be BROKEN: the streaming message's lower bound is
+        // now below the screen (no longer pinned above the input bar). If it
+        // scrolled fully off, the element no longer exists — either way it left.
+        let afterOffScreen = !last.exists || last.frame.maxY > screenHeight
+        print(">>> broke-autoscroll: exists=\(last.exists) maxY=\(last.exists ? String(format: "%.0f", last.frame.maxY) : "gone")")
+        XCTAssertTrue(afterOffScreen,
+            "Auto-follow was not broken: the streaming message is still on screen")
+
+        // It stays off-screen while the stream continues — no snap-back to the bottom.
+        Thread.sleep(forTimeInterval: 1.0)
+        let stillOffScreen = !last.exists || last.frame.maxY > screenHeight
+        print(">>> still off-screen: exists=\(last.exists)")
+        XCTAssertTrue(stillOffScreen, "Auto-follow re-engaged and yanked the message back on screen")
+    }
 }

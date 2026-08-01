@@ -63,9 +63,13 @@ extension ChatCollectionViewController {
             lastContentHeight = current
         }
 
-        // Follow the bottom while the user hasn't scrolled away (initial load,
-        // streaming at bottom) so async growth stays anchored at the latest.
-        let shouldFollowBottom = !userScrolled || isNearBottom()
+        // Follow the bottom while the user isn't actively interacting (tracking/
+        // dragging/decelerating) and is at the bottom or hasn't scrolled away —
+        // so a drag is never fought by the auto-follow (which otherwise reset the
+        // offset every tick and welded the view to the bottom during streaming),
+        // and a released scroll near the bottom resumes anchoring the stream.
+        let isUserInteracting = collectionView.isTracking || collectionView.isDragging || collectionView.isDecelerating
+        let shouldFollowBottom = !isUserInteracting && (!userScrolled || isNearBottom())
         if shouldFollowBottom { scrollToBottom(animated: false) }
 
         // Only stop once the offset has actually reached the bottom target and

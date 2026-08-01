@@ -224,7 +224,19 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
         if let existing = hostingControllers[message.id] {
             return existing
         }
-        let host = UIHostingController(rootView: MessageBubbleView(message: message))
+        let host = UIHostingController(rootView: MessageBubbleView(message: message, onLayoutChange: { [weak self] in
+            // A thinking block expanding/collapsing changes the bubble's
+            // intrinsic height with no settle loop running (post-stream), so
+            // the cached cell would keep its old height and the content would
+            // overlap its neighbor. Re-measure after SwiftUI applies the state
+            // change, then re-anchor if near the bottom.
+            Task { @MainActor in
+                guard let self else { return }
+                self.collectionView.collectionViewLayout.invalidateLayout()
+                self.collectionView.layoutIfNeeded()
+                if self.isNearBottom() { self.scrollToBottom(animated: false) }
+            }
+        }))
         host.sizingOptions = .intrinsicContentSize
         host.view.translatesAutoresizingMaskIntoConstraints = false
         host.view.backgroundColor = .clear

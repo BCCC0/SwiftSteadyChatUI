@@ -6,10 +6,15 @@ import SwiftUI
 public struct MessageBubbleView: View {
     public let message: StreamingMessage
     public let isInline: Bool
+    /// Called when an internal state change alters this bubble's intrinsic
+    /// height (a thinking block expands/collapses), so the hosting controller
+    /// can re-measure the cell. Nil for static bubbles.
+    internal let onLayoutChange: (() -> Void)?
 
-    public init(message: StreamingMessage, isInline: Bool = false) {
+    public init(message: StreamingMessage, isInline: Bool = false, onLayoutChange: (() -> Void)? = nil) {
         self.message = message
         self.isInline = isInline
+        self.onLayoutChange = onLayoutChange
     }
 
     public var body: some View {
@@ -20,7 +25,7 @@ public struct MessageBubbleView: View {
 
             VStack(alignment: .trailing, spacing: 4) {
                 ForEach(message.blocks) { block in
-                    MessageBlockBubble(block: block)
+                    MessageBlockBubble(block: block, onLayoutChange: onLayoutChange)
                 }
             }
 
@@ -48,8 +53,16 @@ public struct MessageBubbleView: View {
 /// else placeholder.
 internal struct MessageBlockBubble: View {
     let block: StreamingMessage.MessageBlock
+    /// Notifies the hosting controller to re-measure after an expand/collapse
+    /// changes this bubble's intrinsic height.
+    let onLayoutChange: (() -> Void)?
 
     @State private var thinkingExpanded = false
+
+    init(block: StreamingMessage.MessageBlock, onLayoutChange: (() -> Void)? = nil) {
+        self.block = block
+        self.onLayoutChange = onLayoutChange
+    }
 
     var body: some View {
         switch block.kind {
@@ -87,6 +100,10 @@ internal struct MessageBlockBubble: View {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     thinkingExpanded.toggle()
                 }
+                // The expand/collapse changes this bubble's intrinsic height,
+                // so the hosting cell must be re-measured (nothing else will
+                // trigger it once the settle loop has stopped).
+                onLayoutChange?()
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "brain.head.profile")

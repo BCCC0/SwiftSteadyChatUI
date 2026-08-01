@@ -13,6 +13,11 @@ public final class StubChatService: ChatService {
     /// (launch arg `--thinking-reply`). Demonstrates the streamed-thinking fix.
     public var streamsThinking = false
 
+    /// When set, the app auto-sends this prompt on launch (demo only — launch
+    /// arg `--auto-thinking`). Lets you watch the thinking block stream and
+    /// toggle it by hand without typing.
+    public var autoSendText: String?
+
     /// Deterministic thinking text — streams before the reply under
     /// `--thinking-reply`. The UI test waits for the "Let me reason" prefix.
     public static let thinkingText = """
@@ -83,6 +88,26 @@ public final class StubChatService: ChatService {
                 .init(kind: .reply, content: text, isStreamFinished: true)
             ]))
         }
+        onMessagesChanged?()
+    }
+
+    /// Seed a conversation for the thinking-toggle UI test (`--seed-thinking`):
+    /// a NORMAL assistant reply, a user prompt, then a reply WITH thinking (both
+    /// blocks FINISHED — the post-stream state). The thinking message is last,
+    /// so the test toggles its thinking block and checks the expanded/collapsed
+    /// status — no message below to index into, which keeps the UI test
+    /// deterministic.
+    public func seedThinkingConversation() {
+        messages.append(StreamingMessage(id: UUID(), blocks: [
+            .init(kind: .reply, content: "Seeded normal reply", isStreamFinished: true)
+        ]))
+        messages.append(StreamingMessage(id: UUID(), blocks: [
+            .init(kind: .user, content: "Seed prompt", isStreamFinished: true)
+        ]))
+        messages.append(StreamingMessage(id: UUID(), blocks: [
+            .init(kind: .thinking, content: StubChatService.thinkingText, isStreamFinished: true),
+            .init(kind: .reply, content: StubChatService.longStreamingReply, isStreamFinished: true)
+        ]))
         onMessagesChanged?()
     }
 
@@ -157,7 +182,16 @@ public final class StubChatService: ChatService {
     static func createWithArgs() -> StubChatService {
         let args = ProcessInfo.processInfo.arguments
         let service: StubChatService
-        if args.contains("--thinking-reply") {
+        if args.contains("--seed-thinking") {
+            service = StubChatService()
+            service.seedThinkingConversation()
+        } else if args.contains("--auto-thinking") {
+            // Slower char delay (40ms) so the thinking stream is easy to watch
+            // and toggle by hand. Auto-sends on launch (see the sample App).
+            service = StubChatService(responsePool: [StubChatService.longStreamingReply], charDelayMs: 40)
+            service.streamsThinking = true
+            service.autoSendText = "Show me how you think."
+        } else if args.contains("--thinking-reply") {
             service = StubChatService(responsePool: [StubChatService.longStreamingReply])
             service.streamsThinking = true
         } else if args.contains("--longest-reply") {
