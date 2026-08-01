@@ -13,6 +13,8 @@ streaming chat implementations.
 - iOS 18.0+
 - Swift Package Manager
 
+The UI layout is used in <https://github.com/BCCC0/SwiftTavern>.
+
 ## The three guarantees
 
 1. **No flicker.** Every message owns a cached hosting controller that lives
