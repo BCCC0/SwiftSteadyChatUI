@@ -6,9 +6,13 @@ import Foundation
 @Test("StreamingMessage isStreaming reflects an active source")
 func streamingFlagTracksSource() {
     let source = ChatStreamSource()
-    var m = StreamingMessage(id: UUID(), role: .assistant, content: "", thinking: nil, streamSource: source, isStreamFinished: false)
+    var m = StreamingMessage(id: UUID(), blocks: [
+        .init(kind: .reply, content: "", streamSource: source, isStreamFinished: false)
+    ])
     #expect(m.isStreaming)
-    m = StreamingMessage(id: UUID(), role: .assistant, content: "done", thinking: nil, streamSource: nil, isStreamFinished: true)
+    m = StreamingMessage(id: UUID(), blocks: [
+        .init(kind: .reply, content: "done", isStreamFinished: true)
+    ])
     #expect(!m.isStreaming)
 }
 

@@ -7,9 +7,6 @@ public struct MessageBubbleView: View {
     public let message: StreamingMessage
     public let isInline: Bool
 
-    @State private var thinkingExpanded = false
-    @State private var userManuallyCollapsed = false
-
     public init(message: StreamingMessage, isInline: Bool = false) {
         self.message = message
         self.isInline = isInline
@@ -22,23 +19,8 @@ public struct MessageBubbleView: View {
             }
 
             VStack(alignment: .trailing, spacing: 4) {
-                if message.role == .assistant {
-                    // ── Thinking block (collapsible) ──
-                    if hasThinking {
-                        thinkingBubble
-                    }
-
-                    // ── Reply bubble (always visible) ──
-                    replyBubble
-                } else {
-                    // User message
-                    Text(message.content)
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                ForEach(message.blocks) { block in
+                    MessageBlockBubble(block: block)
                 }
             }
 
@@ -52,17 +34,59 @@ public struct MessageBubbleView: View {
         .accessibilityIdentifier(message.role == .user ? "user-msg" : "assistant-msg")
     }
 
-    // MARK: - Thinking Bubble
+    /// Message-level: every block renders statically (no live stream).
+    /// Test-visible (not API) — asserted by CacheEvictionTests.
+    internal var usesStaticMarkdown: Bool { message.isStreamFinished }
+}
 
-    @ViewBuilder
+// MARK: - One block
+
+/// Renders one `MessageBlock` by its `kind` + finish/source state — the
+/// per-block render derivation in the design spec:
+/// `.user` → static blue text; `isStreamFinished` → static `MarkdownView`
+/// (finished WINS even when a source is present); live source → streamed;
+/// else placeholder.
+internal struct MessageBlockBubble: View {
+    let block: StreamingMessage.MessageBlock
+
+    @State private var thinkingExpanded = false
+
+    var body: some View {
+        switch block.kind {
+        case .user:
+            userBubble
+        case .thinking:
+            thinkingBubble
+        case .reply:
+            replyBubble
+        }
+    }
+
+    /// Test-visible render decision (not API).
+    internal var usesStaticMarkdown: Bool {
+        block.kind == .user || block.isStreamFinished
+    }
+
+    // MARK: User prompt — instant static blue bubble (never streams)
+
+    private var userBubble: some View {
+        Text(block.content ?? "")
+            .textSelection(.enabled)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(Color.blue)
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    // MARK: Thinking — collapsible, streams markdown
+
     private var thinkingBubble: some View {
         VStack(spacing: 0) {
             Button {
-                let toggledOn = !thinkingExpanded
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    thinkingExpanded = toggledOn
+                    thinkingExpanded.toggle()
                 }
-                if !toggledOn { userManuallyCollapsed = true }
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "brain.head.profile")
@@ -70,7 +94,7 @@ public struct MessageBubbleView: View {
                     Text("Show thinking")
                         .font(.caption2)
                     Spacer()
-                    if message.isStreamFinished {
+                    if block.isStreamFinished {
                         Text("Done thinking")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -85,6 +109,7 @@ public struct MessageBubbleView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("thinking-toggle")
 
             // Thinking content — ALWAYS in the view tree so streaming continues
             // even when collapsed. Only visual visibility is conditional.
@@ -98,13 +123,15 @@ public struct MessageBubbleView: View {
                 .clipped()
                 .allowsHitTesting(thinkingExpanded)
         }
-        // Thinking block stays collapsed by default. The user taps the toggle to view thinking content.
     }
 
     @ViewBuilder
     private var thinkingContent: some View {
-        if let thinking = message.thinking, !thinking.isEmpty {
-            MarkdownView(text: thinking)
+        if block.isStreamFinished {
+            MarkdownView(text: block.content ?? "")
+                .transition(.identity)
+        } else if let source = block.streamSource {
+            StreamedMarkdownView(source: source)
                 .transition(.identity)
         } else {
             HStack {
@@ -119,50 +146,26 @@ public struct MessageBubbleView: View {
         }
     }
 
-    // MARK: - Reply Bubble
+    // MARK: Reply — normal markdown bubble, always visible
 
-    /// Test-visible (not API) AND the reply-bubble's single source of truth for
-    /// rendering strategy — `replyBubble` branches on it directly, so the hook
-    /// and the actual rendering can never drift apart.
-    ///
-    /// Finished messages render statically (`MarkdownView`). This MUST take
-    /// precedence over the stream branch: a re-created hosting controller
-    /// (cache eviction then scroll-back) builds a fresh `StreamedMarkdownView`,
-    /// but the message's `streamSource` AsyncStream is already exhausted, so a
-    /// live stream would consume nothing and render a blank bubble where
-    /// content used to be.
-    internal var usesStaticMarkdown: Bool {
-        if message.isStreamFinished { return true }
-        if message.streamSource != nil { return false }
-        return !message.content.isEmpty
+    private var replyBubble: some View {
+        replyContent
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(Color.gray.opacity(0.2))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     @ViewBuilder
-    private var replyBubble: some View {
-        if usesStaticMarkdown {
-            MarkdownView(text: message.content)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Color.gray.opacity(0.2))
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-        } else if let source = message.streamSource {
-            StreamedMarkdownView(source: source)  // still streaming → keep the live stream
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Color.gray.opacity(0.2))
-                .clipShape(RoundedRectangle(cornerRadius: 18))
+    private var replyContent: some View {
+        if block.isStreamFinished {
+            MarkdownView(text: block.content ?? "")
+        } else if let source = block.streamSource {
+            StreamedMarkdownView(source: source)
         } else {
-            // Empty placeholder while waiting for reply
+            // Empty placeholder while waiting for the reply to start.
             Text("")
                 .frame(minHeight: 24)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Color.gray.opacity(0.2))
-                .clipShape(RoundedRectangle(cornerRadius: 18))
         }
-    }
-
-    private var hasThinking: Bool {
-        message.thinking != nil
     }
 }

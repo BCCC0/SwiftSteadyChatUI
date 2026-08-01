@@ -163,7 +163,9 @@ private extension ChatCollectionViewController {
     /// change can produce async content — MarkdownView parses, streamed text —
     /// whose cell heights must be re-measured until the layout is stable).
     func updateStreamingState() {
-        activeStreamingID = messages.last(where: { $0.streamSource != nil && !$0.isStreamFinished })?.id
+        // A message is streaming while any of its blocks is unfinished. A `.user`
+        // block is always finished, so only reply-class blocks can stream.
+        activeStreamingID = messages.last(where: { $0.blocks.contains { !$0.isStreamFinished } })?.id
         scheduleSettle()
     }
 }

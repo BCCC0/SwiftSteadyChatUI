@@ -63,12 +63,12 @@ public final class StubChatService: ChatService {
     public func seedMessages(count: Int) {
         for i in 0..<count {
             let text = responsePool[i % responsePool.count]
-            messages.append(StreamingMessage(role: .user, content: "Test message \(i + 1)"))
-            messages.append(StreamingMessage(
-                role: .assistant,
-                content: text,
-                isStreamFinished: true
-            ))
+            messages.append(StreamingMessage(id: UUID(), blocks: [
+                .init(kind: .user, content: "Test message \(i + 1)", isStreamFinished: true)
+            ]))
+            messages.append(StreamingMessage(id: UUID(), blocks: [
+                .init(kind: .reply, content: text, isStreamFinished: true)
+            ]))
         }
         onMessagesChanged?()
     }
@@ -79,49 +79,41 @@ public final class StubChatService: ChatService {
             try? await Task.sleep(for: .milliseconds(50))
         }
 
-        // 1. Append user message
-        messages.append(StreamingMessage(role: .user, content: text))
+        // 1. Instant user prompt (Class 1)
+        messages.append(StreamingMessage(id: UUID(), blocks: [
+            .init(kind: .user, content: text, isStreamFinished: true)
+        ]))
         onMessagesChanged?()
 
         // Brief pause before assistant responds
         try? await Task.sleep(for: .milliseconds(50))
 
-        // 2. Create streaming source + placeholder assistant message
-        let source = ChatStreamSource()
+        // 2. Reply (Class 2) — one streaming reply block
+        let reply = responsePool.randomElement()!
+        let replySource = ChatStreamSource()
         let msgID = UUID()
-        messages.append(StreamingMessage(
-            id: msgID,
-            role: .assistant,
-            content: "",
-            streamSource: source
-        ))
+        messages.append(StreamingMessage(id: msgID, blocks: [
+            .init(kind: .reply, content: "", streamSource: replySource, isStreamFinished: false)
+        ]))
         onMessagesChanged?()
 
-        // 3. Pick a canned response
-        let reply = responsePool.randomElement()!
-
-        // 4. Stream reply character-by-character so the animation is visible.
+        // 3. Stream reply character-by-character so the animation is visible.
         isStreaming = true
         var accumulated = ""
         for ch in reply {
             accumulated.append(ch)
-            source.yield(accumulated)
+            replySource.yield(accumulated)
             try? await Task.sleep(for: .milliseconds(charDelayMs))
         }
-        source.finish()
+        replySource.finish()
         isStreaming = false
 
-        // 5. Keep streamSource alive so StreamedMarkdownView persists —
-        // no flash from StreamedMarkdownView → MarkdownView switch.
+        // 4. Replace with finished blocks — stored ⟹ finished; source kept alive
+        // so a kept controller's stream view shows the final text (no flash).
         guard let idx = messages.firstIndex(where: { $0.id == msgID }) else { return }
-        messages[idx] = StreamingMessage(
-            id: msgID,
-            role: .assistant,
-            content: reply,
-            thinking: nil,
-            streamSource: source,
-            isStreamFinished: true
-        )
+        messages[idx] = StreamingMessage(id: msgID, blocks: [
+            .init(kind: .reply, content: reply, streamSource: replySource, isStreamFinished: true)
+        ])
         onMessagesChanged?()
     }
 

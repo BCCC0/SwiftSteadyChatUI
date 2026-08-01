@@ -29,7 +29,9 @@ final class CacheEvictionTests {
     }
 
     private func makeFinished(_ n: Int) -> StreamingMessage {
-        StreamingMessage(id: UUID(), role: .assistant, content: "msg \(n)", thinking: nil, streamSource: nil, isStreamFinished: true)
+        StreamingMessage(id: UUID(), blocks: [
+            .init(kind: .reply, content: "msg \(n)", isStreamFinished: true)
+        ])
     }
 
     /// A finished message whose `streamSource` is an already-exhausted
@@ -41,7 +43,9 @@ final class CacheEvictionTests {
         let source = ChatStreamSource()
         source.yield("msg \(n)")
         source.finish()
-        return StreamingMessage(id: UUID(), role: .assistant, content: "msg \(n)", thinking: nil, streamSource: source, isStreamFinished: true)
+        return StreamingMessage(id: UUID(), blocks: [
+            .init(kind: .reply, content: "msg \(n)", streamSource: source, isStreamFinished: true)
+        ])
     }
 
     private func makeLoaded(_ svc: StubService) -> ChatCollectionViewController {
