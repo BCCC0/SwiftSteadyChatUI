@@ -51,6 +51,22 @@ public final class ChatCollectionViewController: UIViewController {
     /// deterministically with the render. Cleared when the message finishes.
     private var streamingHeights: [UUID: CGFloat] = [:]
 
+    /// Committed measured height per message id (both streaming and finished).
+    /// `sizeForItemAt` returns this when present so a layout pass NEVER creates a
+    /// hosting controller for an off-screen item: the initial full layout of a
+    /// long history would otherwise materialize a controller per message and the
+    /// first eviction would tear them all down — O(total) hosting churn that
+    /// pegs the main thread. Unmeasured items get an estimate; the real height
+    /// lands when the cell renders (observer growth → measuredHeights).
+    private var measuredHeights: [UUID: CGFloat] = [:]
+
+    /// Cached controller-free height estimate per message id. Computing it
+    /// touches the message's full text (`joined()` + `count`), which is O(total
+    /// chars) — a full layout pass asks every unmeasured item, so on a 20k
+    /// message history the estimate must be computed once and reused, not every
+    /// tick.
+    private var estimatedHeights: [UUID: CGFloat] = [:]
+
     /// Whether the chat auto-scrolls to the bottom on content growth. Starts
     /// following (the initial load lands at the bottom).
     internal var followState: FollowState = .following
@@ -124,10 +140,8 @@ public final class ChatCollectionViewController: UIViewController {
     /// sizeForItemAt for the streaming cell — the cell grows deterministically
     /// with the render (responsive), no live systemLayoutSizeFitting race.
     func onStreamingHeightChange(_ h: CGFloat, for id: UUID) {
-        let current = streamingHeights[id] ?? 0
-        if h > current {
-            streamingHeights[id] = h
-        }
+        if h > (measuredHeights[id] ?? 0) { measuredHeights[id] = h }
+        if h > (streamingHeights[id] ?? 0) { streamingHeights[id] = h }
         scheduleReMeasure()
     }
 
@@ -138,6 +152,12 @@ public final class ChatCollectionViewController: UIViewController {
     func onBubbleHeightChanged() {
         if let streamingID = activeStreamingID {
             streamingHeights.removeValue(forKey: streamingID)
+        }
+        // The toggle changed the message's structure (expand/collapse): drop the
+        // committed height so sizeForItemAt re-measures the (possibly collapsed)
+        // height instead of returning the stale monotonic one.
+        if let streamingID = activeStreamingID {
+            measuredHeights.removeValue(forKey: streamingID)
         }
         scheduleReMeasure()
     }
@@ -305,21 +325,47 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
                                sizeForItemAt indexPath: IndexPath) -> CGSize {
         let msg = messages[indexPath.item]
         let width = collectionView.bounds.width
+        // Streaming cell: size it from the observer's monotonic height (the
+        // render's committed height) — NOT systemLayoutSizeFitting, which races
+        // the async render and never reflects the streamed content. The cell is
+        // responsive (grows with each render), top-aligned, growing downward.
         if !msg.isStreamFinished, let h = streamingHeights[msg.id] {
-            // Streaming cell: size it from the observer's monotonic height (the
-            // render's committed height) — NOT systemLayoutSizeFitting, which
-            // races the async render and never reflects the streamed content.
-            // The cell is responsive (grows with each render) and the top-aligned
-            // bubble grows downward.
             return CGSize(width: width, height: max(h, 1))
         }
-        let host = hostingController(for: msg)
-        let fitting = host.view.systemLayoutSizeFitting(
-            CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
-            withHorizontalFittingPriority: .required,
-            verticalFittingPriority: .fittingSizeLevel
-        )
-        return CGSize(width: width, height: max(fitting.height, 1))
+        // Already measured (streaming finished or static parsed): reuse without
+        // touching the hosting-controller cache. This is what keeps a full
+        // layout pass over a long history cheap — sizeForItemAt is called for
+        // far more items than are visible, and creating a controller per item is
+        // O(total) hosting churn (the 20k-message freeze).
+        if let h = measuredHeights[msg.id] {
+            return CGSize(width: width, height: max(h, 1))
+        }
+        // Unmeasured: return a controller-free estimate. The committed height
+        // lands when the cell actually renders: cellForItemAt creates the
+        // controller, whose whole-message RenderedHeightObserver reports growth
+        // into measuredHeights (→ scheduleReMeasure → re-layout). Measuring here
+        // would force a hosting-controller creation per item during every full
+        // layout pass.
+        return estimatedSize(for: msg, width: width)
+    }
+
+    /// Controller-free height estimate for an unmeasured message. Only needs to
+    /// yield a scrollable contentSize; the committed height replaces it once the
+    /// cell renders (observer growth → measuredHeights). Cached: a full layout
+    /// pass asks every unmeasured item, and computing the estimate touches the
+    /// full text, so it must not be re-done per tick on a long history.
+    private func estimatedSize(for msg: StreamingMessage, width: CGFloat) -> CGSize {
+        let h: CGFloat
+        if let cached = estimatedHeights[msg.id] {
+            h = cached
+        } else {
+            let text = msg.blocks.compactMap { $0.content }.joined()
+            let charsPerLine = max(20, Int(width / 10))
+            let lines = max(1, text.count / charsPerLine)
+            h = CGFloat(lines) * 22 + 40
+            estimatedHeights[msg.id] = h
+        }
+        return CGSize(width: width, height: h)
     }
 
     // MARK: Cached hosting controller
@@ -486,19 +532,29 @@ extension ChatCollectionViewController {
     /// Deletion/regeneration: any cached id no longer present in `messages`
     /// is always evicted, regardless of stream state.
     internal func evictCachedControllers() {
+        // Message id → index map, built ONCE per eviction (O(messages)). The
+        // previous per-controller `first(where:)`/`firstIndex(where:)` scans
+        // were O(messages) for EVERY cached controller on EVERY settle tick —
+        // on a long history (20k messages) that dominated the main thread.
+        var indexByID: [UUID: Int] = [:]
+        indexByID.reserveCapacity(messages.count)
+        for (i, m) in messages.enumerated() { indexByID[m.id] = i }
+
         // 1. Deletion/regeneration: evict ids no longer in the message list.
-        let liveIDs = Set(messages.map(\.id))
-        let staleIDs = hostingControllers.keys.filter { !liveIDs.contains($0) }
+        let staleIDs = hostingControllers.keys.filter { indexByID[$0] == nil }
         for id in staleIDs {
             evict(id)
         }
 
         // 2. Finished messages whose cell frame is outside the visible window.
+        //    Skip the (comparatively expensive) window scan when the cache is
+        //    already bounded — nothing meaningful to evict.
+        guard hostingControllers.count > 32 else { return }
         let visibleWindow = collectionView.bounds.insetBy(dx: 0, dy: -2000)
         let offWindowIDs = hostingControllers.keys.filter { id in
-            guard let message = messages.first(where: { $0.id == id }) else { return false }
-            guard message.isStreamFinished else { return false }
-            guard let index = messages.firstIndex(where: { $0.id == id }),
+            guard let index = indexByID[id],
+                  index < messages.count,
+                  messages[index].isStreamFinished,
                   let frame = collectionView.layoutAttributesForItem(at: IndexPath(item: index, section: 0))?.frame
             else {
                 return false // unknown frame — keep (conservative, no-flicker)

@@ -51,6 +51,11 @@ extension ChatCollectionViewController {
         // stream is active — that is exactly the 60fps poll this design removes.
         let isStreaming = activeStreamingID != nil
         if !isStreaming {
+            // Full layout invalidation is cheap on a long history because
+            // sizeForItemAt never materializes a hosting controller — it returns
+            // cached measuredHeights or a controller-free estimate for unmeasured
+            // items. (A previous version created a controller per item here,
+            // which was O(total) hosting churn: the 20k-message freeze.)
             collectionView.collectionViewLayout.invalidateLayout()
             collectionView.layoutIfNeeded()
             updateTopInsetForShortContent()

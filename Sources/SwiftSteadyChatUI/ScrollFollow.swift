@@ -43,6 +43,11 @@ extension ChatCollectionViewController {
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
         updateFABVisibility()
+        // Cells measured before their async markdown parse completed are too
+        // small until re-measured. Scrolling them into view must re-measure
+        // them, so re-arm the (now visible-only, cheap) settle loop whenever it
+        // isn't already running. The guard prevents restarting an active loop.
+        if settleLink == nil { scheduleSettle() }
     }
 
     /// The follow is broken INSTANTLY on any user drag (before the first scroll
