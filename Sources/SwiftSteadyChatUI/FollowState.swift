@@ -14,7 +14,7 @@ internal enum FollowState: Equatable {
 
     /// The event that moves the state machine.
     internal enum Event {
-        /// Any user drag/scroll gesture — breaks the follow instantly.
+        /// A user drag/scroll gesture — breaks the follow instantly.
         case gestureBegan
         /// An explicit user action to return to the stream (send a prompt, tap
         /// the scroll-to-bottom FAB) — re-engages and pins the bottom.
