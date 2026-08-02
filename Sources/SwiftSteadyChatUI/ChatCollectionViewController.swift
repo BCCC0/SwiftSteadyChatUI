@@ -335,9 +335,9 @@ private extension ChatCollectionViewController {
     func submit(_ text: String) {
         guard !text.isEmpty else { return }
         inputBar.clear()
-        if config.dismissKeyboardOnSend {
-            view.endEditing(true) // dismiss the keyboard on send (standard chat UX)
-        }
+        if config.dismissKeyboardOnSend { view.endEditing(true) }
+        followState = FollowState.transition(current: followState, event: .reengage)
+        scrollToBottom(animated: false)
         Task { await service.sendMessage(text) }
     }
 }
@@ -358,7 +358,11 @@ extension ChatCollectionViewController {
         ])
     }
 
-    @objc func didTapScrollToBottom() { scrollToBottom(animated: true); updateFABVisibility() }
+    @objc func didTapScrollToBottom() {
+        followState = FollowState.transition(current: followState, event: .reengage)
+        scrollToBottom(animated: true)
+        updateFABVisibility()
+    }
 
     func updateFABVisibility() {
         let show = !isNearBottom()

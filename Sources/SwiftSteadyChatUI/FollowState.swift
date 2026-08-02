@@ -2,19 +2,31 @@ import Foundation
 
 /// Whether the chat auto-scrolls to the bottom on content growth.
 ///
-/// - `following`: the user is at the bottom → auto-scroll active.
-/// - `brokenByGesture`: the user dragged/scrolled → auto-scroll off until they
-///   return to the bottom.
+/// This is a LOGICAL state, not a geometric one — there is no "near the bottom"
+/// threshold. The follow breaks on any gesture and re-engages only on an
+/// explicit user action (send a prompt, tap the scroll-to-bottom FAB).
+///
+/// - `following`: auto-scroll active.
+/// - `brokenByGesture`: a gesture broke it; off until an explicit re-engage.
 internal enum FollowState: Equatable {
     case following
     case brokenByGesture
 
-    /// The next state given whether the user is mid-gesture and whether the view
-    /// is at the bottom. A gesture ALWAYS breaks the follow; returning to the
-    /// bottom (not mid-gesture) re-engages it; otherwise the state is unchanged.
-    static func transition(current: FollowState, isInteracting: Bool, isNearBottom: Bool) -> FollowState {
-        if isInteracting { return .brokenByGesture }
-        if isNearBottom { return .following }
-        return current
+    /// The event that moves the state machine.
+    internal enum Event {
+        /// Any user drag/scroll gesture — breaks the follow instantly.
+        case gestureBegan
+        /// An explicit user action to return to the stream (send a prompt, tap
+        /// the scroll-to-bottom FAB) — re-engages and pins the bottom.
+        case reengage
+    }
+
+    /// The next state for an event. A gesture ALWAYS breaks; a re-engage ALWAYS
+    /// re-follows. No geometric condition participates.
+    static func transition(current: FollowState, event: Event) -> FollowState {
+        switch (current, event) {
+        case (_, .gestureBegan): return .brokenByGesture
+        case (_, .reengage): return .following
+        }
     }
 }

@@ -55,12 +55,9 @@ extension ChatCollectionViewController {
             collectionView.layoutIfNeeded()
             updateTopInsetForShortContent()
             collectionView.layoutIfNeeded()
-            // Non-streaming async growth (a static MarkdownView's parse on
-            // initial load / append / finish) has NO observer to trigger the
-            // lazy scroll — RenderedHeightObserver only wraps STREAMED content.
-            // Re-pin the bottom here so the initial load lands at the bottom
-            // and the keyboard push-up (which only fires near the bottom)
-            // engages. Skipped while streaming: the lazy scroll owns following.
+            // Follow the bottom only when the state machine says so. A gesture
+            // breaks it instantly (scrollViewWillBeginDragging); only a re-engage
+            // (send / FAB) turns it back on.
             if shouldFollow { scrollToBottom(animated: false) }
         }
 
