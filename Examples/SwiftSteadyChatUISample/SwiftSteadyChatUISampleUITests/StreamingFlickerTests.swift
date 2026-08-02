@@ -226,4 +226,104 @@ final class StreamingFlickerTests: ChatUITestBase {
         print(">>> still off-screen: exists=\(last.exists)")
         XCTAssertTrue(stillOffScreen, "Auto-follow re-engaged and yanked the message back on screen")
     }
+
+    /// MODE 2 REGRESSION: away from the bottom, the streaming message must NOT
+    /// jitter up/down as its height changes. Sampled over the stream window, its
+    /// bottom edge (maxY) must be monotonic — the change-driven re-measure
+    /// never transiently shrinks the cell (the old 60fps measurement race did).
+    func testStreamingMessageNoJitterWhenAwayFromBottom() throws {
+        app.terminate()
+        app.launchArguments = ["--seed-messages", "8", "--long-reply"]
+        app.launch()
+
+        let tv = app.textViews["input-textview"]
+        XCTAssertTrue(tv.waitForExistence(timeout: 10))
+        tv.tap()
+        tv.typeText("hello")
+        app.buttons["send-button"].tap()
+
+        // Wait for the stream to be mid-flight. The send inserts the user
+        // message and starts the assistant reply; the collection view pins the
+        // bottom, so the streaming cell is materialized. (Do NOT wait on a
+        // logical count — the lazy collection view only materializes ~4 cells,
+        // so waitForMessageCount(18) would never fire.) The h2 > h1 growth
+        // check below confirms the stream is actively growing.
+        Thread.sleep(forTimeInterval: 2)
+
+        // Scroll a small amount away from the bottom (the streaming message
+        // stays visible near the edge).
+        scrollUpSmallAmount()
+
+        guard let last = visibleMessages().last else { XCTFail("No messages"); return }
+        let h1 = last.frame.height
+        Thread.sleep(forTimeInterval: 0.5)
+        let h2 = last.frame.height
+        XCTAssertGreaterThan(h2, h1, "Streaming reply is not growing — not mid-stream")
+
+        // Re-query visibleMessages().last INSIDE the loop. A captured element
+        // re-resolves to a recycled cell once the streaming bubble grows below
+        // the viewport (recycling changes the index→cell mapping), falsely
+        // reading as a ~300pt maxY "drop." Mode 1 already re-queries each poll.
+        var lastMaxY: CGFloat = -1
+        var maxDrop: CGFloat = 0
+        let deadline = Date().addingTimeInterval(8)
+        while Date() < deadline {
+            guard let streaming = visibleMessages().last else { continue }
+            let maxY = streaming.frame.maxY
+            if lastMaxY >= 0 { maxDrop = max(maxDrop, lastMaxY - maxY) }
+            lastMaxY = maxY
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        print(">>> mode2: maxY drop over stream = \(maxDrop)pt")
+        XCTAssertLessThan(maxDrop, 5,
+            "Streaming message jittered: its bottom edge dropped by \(maxDrop)pt while streaming")
+    }
+
+    /// MODE 1 SANITY: following at the bottom, the previous message must move
+    /// monotonically upward as the reply streams — never jump DOWN. (The
+    /// smoothness of the slide is verified visually; this catches the follow
+    /// mis-anchoring / content jumping downward.)
+    func testPreviousMessageMovesMonotonicallyWhenFollowing() throws {
+        app.terminate()
+        app.launchArguments = ["--seed-messages", "8", "--long-reply"]
+        app.launch()
+
+        let tv = app.textViews["input-textview"]
+        XCTAssertTrue(tv.waitForExistence(timeout: 10))
+        tv.tap()
+        tv.typeText("hello")
+        app.buttons["send-button"].tap()
+
+        // Wait for the stream to be mid-flight. The send inserts the user
+        // message and starts the assistant reply; the collection view pins the
+        // bottom, so the streaming cell is materialized. (Do NOT wait on a
+        // logical count — the lazy collection view only materializes ~4 cells,
+        // so waitForMessageCount(18) would never fire.) The h2 > h1 growth
+        // check below confirms the stream is actively growing.
+        Thread.sleep(forTimeInterval: 2)
+        guard let last = visibleMessages().last else { XCTFail("No messages"); return }
+        let h1 = last.frame.height
+        Thread.sleep(forTimeInterval: 0.5)
+        let h2 = last.frame.height
+        XCTAssertGreaterThan(h2, h1, "Streaming reply is not growing — not mid-stream")
+
+        // The message ABOVE the streaming one. As the reply streams at the
+        // bottom, this one moves UP (its maxY decreases); it must never move
+        // down (maxY increase) — a broken follow would push it down.
+        var lastPrevMaxY: CGFloat = -1
+        var maxRise: CGFloat = 0
+        let deadline = Date().addingTimeInterval(8)
+        while Date() < deadline {
+            let msgs = visibleMessages()
+            guard msgs.count >= 2 else { continue }
+            let prev = msgs[msgs.count - 2]
+            let y = prev.frame.maxY
+            if lastPrevMaxY >= 0 { maxRise = max(maxRise, y - lastPrevMaxY) }
+            lastPrevMaxY = y
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        print(">>> mode1: previous message maxY rise = \(maxRise)pt")
+        XCTAssertLessThan(maxRise, 5,
+            "Previous message jumped DOWN by \(maxRise)pt while following — broken follow")
+    }
 }
