@@ -143,6 +143,7 @@ public final class ChatCollectionViewController: UIViewController {
         lazyScrollTask = Task { @MainActor [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
             guard self.shouldFollow else { return }
             self.collectionView.layoutIfNeeded()
             let inset = self.collectionView.adjustedContentInset
