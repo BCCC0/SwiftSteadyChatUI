@@ -203,7 +203,14 @@ public final class StubChatService: ChatService {
         } else if args.contains("--long-reply") {
             service = StubChatService(responsePool: [StubChatService.longStreamingReply])
         } else {
+            // Default launch (no args): demonstrate the thinking block.
+            // `streamsThinking` makes every reply stream a thinking block first,
+            // and `autoSendText` auto-sends a prompt shortly after launch (see
+            // the sample App) so the streamed thinking + toggle is visible
+            // immediately — no launch args needed.
             service = StubChatService()
+            service.streamsThinking = true
+            service.autoSendText = "Show me how you think."
         }
         if let idx = args.firstIndex(of: "--seed-messages"),
            let countStr = args.dropFirst(idx + 1).first,
