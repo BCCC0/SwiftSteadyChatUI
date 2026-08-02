@@ -91,6 +91,6 @@ final class CacheEvictionTests {
         // the bubble would render blank where content used to be.
         let last = vc.messages[199]
         let recreated = vc.hostingController(for: last)
-        #expect(recreated.rootView.usesStaticMarkdown)
+        #expect(recreated.rootView.content.usesStaticMarkdown)
     }
 }

@@ -38,10 +38,18 @@ public final class ChatCollectionViewController: UIViewController {
 
     /// Cached per-message hosting controllers — the heart of the pattern.
     /// Keyed by message UUID so the StreamedMarkdownView survives cell reuse.
-    private var hostingControllers: [UUID: UIHostingController<MessageBubbleView>] = [:]
+    /// The root view is the whole message wrapped in the RenderedHeightObserver
+    /// (whose monotonic height drives the streaming cell's size).
+    private var hostingControllers: [UUID: UIHostingController<RenderedHeightObserver<MessageBubbleView>>] = [:]
     /// The message currently streaming; used to keep the settle loop alive.
     internal var activeStreamingID: UUID?
     private var initialScrollDone = false
+
+    /// Monotonic reported height per STREAMING message id, from the whole-message
+    /// RenderedHeightObserver. The streaming cell is sized from this (never from
+    /// live systemLayoutSizeFitting, which races the async render), so it grows
+    /// deterministically with the render. Cleared when the message finishes.
+    private var streamingHeights: [UUID: CGFloat] = [:]
 
     /// Whether the chat auto-scrolls to the bottom on content growth. Starts
     /// following (the initial load lands at the bottom).
@@ -111,10 +119,26 @@ public final class ChatCollectionViewController: UIViewController {
     /// toggle) into ONE re-measure per runloop, then conditionally lazy-scrolls.
     private var needsReMeasure = false
 
-    /// Entry for BOTH height-change sources: the RenderedHeightObserver (streaming
-    /// content growth) and the thinking toggle (onLayoutChange). Re-measures the
-    /// cell at the just-rendered height, then lazy-scrolls if following.
+    /// The whole-message RenderedHeightObserver reports the message's ideal
+    /// height on every render GROWTH. Stored monotonically and used by
+    /// sizeForItemAt for the streaming cell — the cell grows deterministically
+    /// with the render (responsive), no live systemLayoutSizeFitting race.
+    func onStreamingHeightChange(_ h: CGFloat, for id: UUID) {
+        let current = streamingHeights[id] ?? 0
+        if h > current {
+            streamingHeights[id] = h
+        }
+        scheduleReMeasure()
+    }
+
+    /// The thinking toggle (onLayoutChange) changed the message's structure
+    /// (expand/collapse) — clear the monotonic streaming height so sizeForItemAt
+    /// falls back to systemLayoutSizeFitting for the current (possibly
+    /// collapsed) height.
     func onBubbleHeightChanged() {
+        if let streamingID = activeStreamingID {
+            streamingHeights.removeValue(forKey: streamingID)
+        }
         scheduleReMeasure()
     }
 
@@ -226,10 +250,16 @@ private extension ChatCollectionViewController {
         // A message is streaming while any reply-class block is unfinished. A
         // `.user` block is always finished, so only thinking/reply stream.
         activeStreamingID = messages.last(where: { $0.blocks.contains { $0.kind != .user && !$0.isStreamFinished } })?.id
+        // Drop the monotonic height for messages that finished (or were
+        // removed) — the finished cell re-measures via systemLayoutSizeFitting.
+        // Streaming messages keep their observer-driven height.
+        streamingHeights = streamingHeights.filter { id, _ in
+            messages.first(where: { $0.id == id })?.isStreamFinished == false
+        }
         // The settle loop re-measures NON-streaming async content (initial load,
         // static markdown parse on append, the finished message on finish).
-        // Streaming growth is driven change-driven by RenderedHeightObserver →
-        // onBubbleHeightChanged, so the loop must not spin during a stream.
+        // Streaming growth is driven by the RenderedHeightObserver → the stored
+        // height, so the loop must not spin during a stream.
         if activeStreamingID == nil {
             scheduleSettle()
         }
@@ -274,8 +304,16 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
                                layout collectionViewLayout: UICollectionViewLayout,
                                sizeForItemAt indexPath: IndexPath) -> CGSize {
         let msg = messages[indexPath.item]
-        let host = hostingController(for: msg)
         let width = collectionView.bounds.width
+        if !msg.isStreamFinished, let h = streamingHeights[msg.id] {
+            // Streaming cell: size it from the observer's monotonic height (the
+            // render's committed height) — NOT systemLayoutSizeFitting, which
+            // races the async render and never reflects the streamed content.
+            // The cell is responsive (grows with each render) and the top-aligned
+            // bubble grows downward.
+            return CGSize(width: width, height: max(h, 1))
+        }
+        let host = hostingController(for: msg)
         let fitting = host.view.systemLayoutSizeFitting(
             CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required,
@@ -286,15 +324,21 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
 
     // MARK: Cached hosting controller
 
-    func hostingController(for message: StreamingMessage) -> UIHostingController<MessageBubbleView> {
+    func hostingController(for message: StreamingMessage) -> UIHostingController<RenderedHeightObserver<MessageBubbleView>> {
         if let existing = hostingControllers[message.id] {
             return existing
         }
-        let host = UIHostingController(rootView: MessageBubbleView(
-            message: message,
-            onLayoutChange: { [weak self] in self?.onBubbleHeightChanged() },
-            onStreamingHeightChange: { [weak self] _ in self?.onBubbleHeightChanged() }
-        ))
+        // The whole message is wrapped in the RenderedHeightObserver: its
+        // onGeometryChange reports the message's TOTAL ideal height on every
+        // render growth, which drives the streaming cell's height (sizeForItemAt).
+        let host = UIHostingController(rootView: RenderedHeightObserver(
+            content: MessageBubbleView(
+                message: message,
+                onLayoutChange: { [weak self] in self?.onBubbleHeightChanged() }
+            )
+        ) { [weak self] h in
+            self?.onStreamingHeightChange(h, for: message.id)
+        })
         host.sizingOptions = .intrinsicContentSize
         host.view.translatesAutoresizingMaskIntoConstraints = false
         host.view.backgroundColor = .clear
