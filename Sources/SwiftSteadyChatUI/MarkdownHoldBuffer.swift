@@ -12,14 +12,16 @@ enum MarkdownHoldBuffer {
     /// The number of leading characters of `text` safe to forward now.
     /// `text[count...]` is held until it resolves or the stream finishes.
     static func safeForwardCount(of text: String) -> Int {
-        var lines: [(range: Range<String.Index>, text: Substring)] = []
+        var lines: [(offset: Int, text: Substring)] = []
         var cursor = text.startIndex
+        var offset = 0
         while cursor < text.endIndex {
             if let nl = text[cursor...].firstIndex(of: "\n") {
-                lines.append((cursor..<nl, text[cursor..<nl]))
+                lines.append((offset, text[cursor..<nl]))
+                offset += text[cursor..<nl].count + 1   // line + newline
                 cursor = text.index(after: nl)
             } else {
-                lines.append((cursor..<text.endIndex, text[cursor...]))
+                lines.append((offset, text[cursor...]))
                 break
             }
         }
@@ -32,7 +34,7 @@ enum MarkdownHoldBuffer {
         var paragraphStart: Int?
 
         for line in lines {
-            let offset = text.distance(from: text.startIndex, to: line.range.lowerBound)
+            let offset = line.offset
             let t = String(line.text)
             let trimmed = t.trimmingCharacters(in: .whitespaces)
 

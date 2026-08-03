@@ -204,7 +204,7 @@ internal struct MessageBlockBubble: View {
 
 // MARK: - Live streaming markdown in a fixed-but-expandable window
 
-/// The live-markdown streaming container (normal mode): the streamed markdown
+/// The live-markdown streaming container: the streamed markdown
 /// is LOCKED to the last committed render height (`revealedHeight`, monotonic),
 /// so each re-render refills a stable space (no cell-resize jitter) and the
 /// window grows in discrete steps on render completion, revealing content

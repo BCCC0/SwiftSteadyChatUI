@@ -74,4 +74,10 @@ struct MarkdownHoldBufferTests {
         // single paragraph line is held (setext-ambiguous)
         #expect(MarkdownHoldBuffer.safeForwardCount(of: text) == expected)
     }
+
+    @Test("a partial delimiter row confirms the table (no header leak)")
+    func partialDelimiterConfirmsTable() {
+        let text = "| A | B |\n|-"
+        #expect(MarkdownHoldBuffer.safeForwardCount(of: text) == 0)
+    }
 }
