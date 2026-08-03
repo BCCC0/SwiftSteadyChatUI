@@ -4,7 +4,7 @@ import Testing
 @Suite("ChatStreamSource hold")
 struct ChatStreamSourceHoldTests {
 
-    @Test("a held table is not delivered until it resolves or finish")
+    @Test("a held table is not delivered until it resolves, then flush-on-finish")
     func heldTableNotDeliveredUntilResolved() async {
         let source = ChatStreamSource()
         var received: [String] = []
@@ -13,15 +13,31 @@ struct ChatStreamSourceHoldTests {
         }
 
         let table = "| A | B |\n|---|---|\n| 1 | 2 |"
-        source.yield(table)                       // held → nothing delivered
-        let resolved = table + "\n\nnext paragraph" // table closes at the blank
+        let resolved = table + "\n\nnext paragraph"
+        let safePrefix = table + "\n\n"   // table closed by the blank; tail held
+
+        source.yield(table)
         source.yield(resolved)
-        source.finish()                            // flushes any remaining tail
+        source.finish()
         await reader.value
 
-        // The held table is forwarded only once it closes; finish flushes the
-        // trailing single-line paragraph so the final snapshot is the full text.
-        #expect(received.last == resolved)
+        #expect(received == [safePrefix, resolved])
+    }
+
+    @Test("a setext-ambiguous single line is held until the next line resolves it")
+    func setextSingleLineHeldUntilResolved() async {
+        let source = ChatStreamSource()
+        var received: [String] = []
+        let reader = Task {
+            for await s in source.text { received.append(s) }
+        }
+
+        source.yield("just one line")                 // held (could become setext)
+        source.yield("just one line\nsecond line")    // multi-line paragraph → forwarded
+        source.finish()
+        await reader.value
+
+        #expect(received == ["just one line\nsecond line"])
     }
 
     @Test("plain paragraphs stream live, not held")
@@ -37,6 +53,6 @@ struct ChatStreamSourceHoldTests {
         source.finish()
         await reader.value
 
-        #expect(received.last == para)
+        #expect(received == [para])
     }
 }
