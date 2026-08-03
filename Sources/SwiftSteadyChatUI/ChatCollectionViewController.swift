@@ -380,6 +380,7 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
         let host = UIHostingController(rootView: RenderedHeightObserver(
             content: MessageBubbleView(
                 message: message,
+                streamingMode: config.streamingMode,
                 onLayoutChange: { [weak self] in self?.onBubbleHeightChanged() }
             )
         ) { [weak self] h in

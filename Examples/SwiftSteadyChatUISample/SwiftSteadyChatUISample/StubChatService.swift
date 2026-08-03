@@ -35,6 +35,57 @@ public final class StubChatService: ChatService {
         self.charDelayMs = charDelayMs
     }
 
+    /// When set (launch arg `--chunk-ms N`), streamed text is coalesced into
+    /// chunks of ~N ms instead of one yield per character. Fewer yields = fewer
+    /// full-document re-parses in the renderer = less reflow (and the renderer
+    /// keeps up better on long replies). Nil = one yield per char.
+    public var chunkMs: UInt64?
+
+    /// Stream `text` into `source` as full-snapshot yields, coalescing to
+    /// ~`chunkMs`-sized chunks when configured.
+    private func stream(_ text: String, into source: ChatStreamSource) async {
+        var acc = ""
+        if let chunkMs, chunkMs > 0 {
+            var chunkStart = Date()
+            for ch in text {
+                acc.append(ch)
+                try? await Task.sleep(for: .milliseconds(charDelayMs))
+                if Date().timeIntervalSince(chunkStart) * 1000 >= Double(chunkMs) {
+                    source.yield(acc)
+                    chunkStart = Date()
+                }
+            }
+            source.yield(acc) // final chunk
+        } else {
+            for ch in text {
+                acc.append(ch)
+                source.yield(acc)
+                try? await Task.sleep(for: .milliseconds(charDelayMs))
+            }
+        }
+    }
+
+    /// When set (launch arg `--block-chunks`), the reply is yielded ONE COMPLETE
+    /// BLOCK at a time (split at blank lines) instead of per char — each yield
+    /// delivers a full block (a table, a code fence, a heading, …), so no
+    /// partial multi-line structure is ever rendered.
+    public var streamsBlocks = false
+    /// Delay between block yields when `streamsBlocks` is set (`--block-delay-ms`).
+    public var blockDelayMs: UInt64 = 900
+
+    /// Stream `text` one complete block per yield (split at `\n\n`), sleeping
+    /// `blockDelayMs` between yields so each block visibly lands as a unit.
+    private func streamBlockByBlock(_ text: String, into source: ChatStreamSource) async {
+        let segments = text.components(separatedBy: "\n\n")
+        var acc = ""
+        for (i, segment) in segments.enumerated() {
+            acc += segment
+            if i < segments.count - 1 { acc += "\n\n" }
+            source.yield(acc)
+            try? await Task.sleep(for: .milliseconds(blockDelayMs))
+        }
+    }
+
     /// Deterministic long markdown reply for streaming tests (`--long-reply`).
     /// Multi-paragraph, bold, list, and a code block — exercises the streaming
     /// markdown path over several seconds (~250 chars @ 20ms ≈ 5s).
@@ -52,6 +103,55 @@ public final class StubChatService: ChatService {
 
     And a final paragraph so the bubble keeps growing tall enough to exercise
     the streaming render path for a few seconds.
+    """
+
+    /// A syntax-dense markdown reply for judging streaming reflow flicker
+    /// (`--rich-reply`). Packs the block types that historically reflow worst
+    /// while streaming — headings, a table, nested lists, a blockquote, code
+    /// blocks, and heavy inline styling — so each re-render has real layout
+    /// churn to either reflow (flicker) or re-fill a locked height (stable).
+    public static let richStreamingReply = """
+    # Heading One — a big title
+
+    ## Heading Two with **bold** inside
+
+    A paragraph with **bold**, *italic*, ***bold italic***, `inline code`, a
+    [link](https://example.com), and ~~strikethrough~~ to stress inline reflow.
+
+    > A blockquote with *emphasis* and `code` inside, spanning enough lines to
+    > force the block to wrap and re-measure as the stream grows taller.
+
+    1. First ordered item with **bold text** that wraps across lines
+    2. Second ordered item with `inline code`
+       - a nested bullet under the ordered item
+       - another nested bullet that keeps going
+    3. Third ordered item with a [link](https://example.com)
+
+    * Unordered item one with a [link](https://example.com)
+    * Unordered item two with *italic* styling
+    * Unordered item three with **bold**
+
+    | Column A | Column B | Column C |
+    |---|---|---|
+    | alpha | **bold** | `code` |
+    | beta | *italic* | more text |
+
+    ```swift
+    func flickerCheck(_ markdown: String) -> Bool {
+        let rendered = renderer.parse(markdown)
+        return rendered.isStable
+    }
+    ```
+
+    ---
+
+    ### Heading Three with a list
+
+    - bullet with *emphasis*
+    - bullet with `code` and a [link](https://example.com)
+
+    And a final paragraph that keeps growing so the reveal keeps stepping
+    downward to the very end of the document.
     """
 
     /// A genuinely huge markdown reply for stress-demoing the streaming render
@@ -142,20 +242,14 @@ public final class StubChatService: ChatService {
 
         // 3. Stream thinking first (full snapshots), then the reply.
         if let thinkingSource {
-            var acc = ""
-            for ch in StubChatService.thinkingText {
-                acc.append(ch)
-                thinkingSource.yield(acc)
-                try? await Task.sleep(for: .milliseconds(charDelayMs))
-            }
+            await stream(StubChatService.thinkingText, into: thinkingSource)
             thinkingSource.finish()
         }
 
-        var acc = ""
-        for ch in reply {
-            acc.append(ch)
-            replySource.yield(acc)
-            try? await Task.sleep(for: .milliseconds(charDelayMs))
+        if streamsBlocks {
+            await streamBlockByBlock(reply, into: replySource)
+        } else {
+            await stream(reply, into: replySource)
         }
         replySource.finish()
 
@@ -191,6 +285,23 @@ public final class StubChatService: ChatService {
             service = StubChatService(responsePool: [StubChatService.longStreamingReply], charDelayMs: 40)
             service.streamsThinking = true
             service.autoSendText = "Show me how you think."
+        } else if args.contains("--rich-reply") {
+            // Syntax-dense markdown at a watchable pace (~35ms/char ≈ 18s):
+            // headings, table, nested lists, blockquote, code blocks. Auto-sends
+            // so the stream starts without typing.
+            service = StubChatService(responsePool: [StubChatService.richStreamingReply], charDelayMs: 35)
+            service.autoSendText = "Render complex markdown"
+        } else if args.contains("--block-chunks") {
+            // Yield ONE COMPLETE BLOCK per yield (table, code fence, heading, …)
+            // with a delay between, so no partial multi-line structure renders.
+            service = StubChatService(responsePool: [StubChatService.richStreamingReply])
+            service.autoSendText = "Show me the blocks"
+            service.streamsBlocks = true
+            if let idx = args.firstIndex(of: "--block-delay-ms"),
+               let val = args.dropFirst(idx + 1).first,
+               let ms = UInt64(val) {
+                service.blockDelayMs = ms
+            }
         } else if args.contains("--thinking-reply") {
             service = StubChatService(responsePool: [StubChatService.longStreamingReply])
             service.streamsThinking = true
@@ -216,6 +327,11 @@ public final class StubChatService: ChatService {
            let countStr = args.dropFirst(idx + 1).first,
            let count = Int(countStr) {
             service.seedMessages(count: count)
+        }
+        if let idx = args.firstIndex(of: "--chunk-ms"),
+           let val = args.dropFirst(idx + 1).first,
+           let ms = UInt64(val) {
+            service.chunkMs = ms
         }
         return service
     }
