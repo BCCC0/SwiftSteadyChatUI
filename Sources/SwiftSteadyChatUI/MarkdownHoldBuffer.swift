@@ -71,7 +71,11 @@ enum MarkdownHoldBuffer {
                 paragraphCount = 0
                 paragraphStart = nil
             } else {
+                // A non-pipe content line closes an ACTIVE table too (the spec:
+                // a table ends at a blank line OR a non-`|` line). Only the
+                // trailing paragraph (setext-ambiguous single line) stays held.
                 pendingTableStart = nil
+                activeTableStart = nil
                 if isSetextUnderline(trimmed) || isBlockStart(trimmed) {
                     paragraphCount = 0
                     paragraphStart = nil

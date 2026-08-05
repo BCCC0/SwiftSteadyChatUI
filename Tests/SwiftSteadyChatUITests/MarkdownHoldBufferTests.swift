@@ -80,4 +80,12 @@ struct MarkdownHoldBufferTests {
         let text = "| A | B |\n|-"
         #expect(MarkdownHoldBuffer.safeForwardCount(of: text) == 0)
     }
+
+    @Test("an active table closes on a non-pipe content line (no blank needed)")
+    func activeTableClosesOnContentLine() {
+        let text = "| A | B |\n|---|---|\n| 1 | 2 |\nnext"
+        let expected = "| A | B |\n|---|---|\n| 1 | 2 |\n".count
+        // the table closes at "next"; only the trailing single line is held
+        #expect(MarkdownHoldBuffer.safeForwardCount(of: text) == expected)
+    }
 }

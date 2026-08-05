@@ -30,9 +30,11 @@ public struct MessageBubbleView: View {
                 Spacer(minLength: isInline ? 40 : 60)
             }
 
-            // Fill the available width so an EMPTY streaming block (a slim bar
-            // with no intrinsic width) still spans the full bubble width, like
-            // the rendered markdown does. Trailing keeps bubbles right-aligned.
+            // Deliberate design (2026-08-05): the bubble column fills the
+            // available width, so assistant bubbles (including an EMPTY streaming
+            // block, a slim bar with no intrinsic width) span the full bubble
+            // width. Trailing alignment pins compact blocks (user prompts, the
+            // thinking header) to the trailing edge.
             VStack(alignment: .trailing, spacing: 4) {
                 ForEach(message.blocks) { block in
                     MessageBlockBubble(block: block, onLayoutChange: onLayoutChange)
@@ -228,7 +230,10 @@ private struct ProgressiveRevealMarkdown: View {
 
     var body: some View {
         RenderedHeightObserver(
-            content: StreamedMarkdownView(source: source)
+            content: StreamedMarkdownView(
+                source: source,
+                config: MarkdownRenderConfig(shouldAnimateText: true)
+            )
         ) { h in
             if h > revealedHeight { revealedHeight = h }
         }
