@@ -9,6 +9,18 @@ public final class ChatInputBar: UIView {
     private let sendButton = UIButton(type: .system)
 
     private var textViewHeightConstraint: NSLayoutConstraint?
+    /// When set, wins over the text-driven default so a consumer can pin the
+    /// send button (e.g. disabled while the service is busy). `nil` = enabled
+    /// iff the text view has text.
+    private var sendEnabledOverride: Bool?
+
+    /// Public API: override the send button's enabled state. Pass `nil` to
+    /// restore the text-driven default. Lets the consumer reset the button
+    /// (e.g. disable it while a reply is streaming) whenever they want.
+    public func setSendEnabled(_ enabled: Bool?) {
+        sendEnabledOverride = enabled
+        updateSendButtonState()
+    }
 
     public override init(frame: CGRect) {
         super.init(frame: frame)
@@ -78,8 +90,9 @@ public final class ChatInputBar: UIView {
 
     private func updateSendButtonState() {
         let hasText = !(textView.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty
-        sendButton.isEnabled = hasText
-        sendButton.backgroundColor = hasText ? .systemBlue : .systemGray
+        let enabled = sendEnabledOverride ?? hasText
+        sendButton.isEnabled = enabled
+        sendButton.backgroundColor = enabled ? .systemBlue : .systemGray
     }
 
     private func updateTextViewHeight() {

@@ -30,11 +30,15 @@ public struct MessageBubbleView: View {
                 Spacer(minLength: isInline ? 40 : 60)
             }
 
+            // Fill the available width so an EMPTY streaming block (a slim bar
+            // with no intrinsic width) still spans the full bubble width, like
+            // the rendered markdown does. Trailing keeps bubbles right-aligned.
             VStack(alignment: .trailing, spacing: 4) {
                 ForEach(message.blocks) { block in
                     MessageBlockBubble(block: block, onLayoutChange: onLayoutChange)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
 
             if message.role == .assistant {
                 Spacer(minLength: isInline ? 40 : 60)
@@ -218,8 +222,9 @@ private struct ProgressiveRevealMarkdown: View {
 
     /// The committed window height. Starts small (the first render is a
     /// fraction of the eventual reply) and only ever grows — monotonic, so the
-    /// container never shrinks mid-stream (the streaming jitter).
-    @State private var revealedHeight: CGFloat = 40
+    /// container never shrinks mid-stream (the streaming jitter). The 10pt
+    /// start keeps an empty reply a slim full-width bar rather than a hollow box.
+    @State private var revealedHeight: CGFloat = 10
 
     var body: some View {
         RenderedHeightObserver(
@@ -227,6 +232,7 @@ private struct ProgressiveRevealMarkdown: View {
         ) { h in
             if h > revealedHeight { revealedHeight = h }
         }
+        .frame(maxWidth: .infinity, alignment: .top)
         .frame(height: revealedHeight, alignment: .top)
         .clipped()
     }

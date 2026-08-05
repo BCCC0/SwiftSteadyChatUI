@@ -399,6 +399,15 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
 
 // MARK: - InputBar
 
+extension ChatCollectionViewController {
+    /// Public API: override the send button's enabled state. Pass `nil` to
+    /// restore the text-driven default. Lets a consumer pin the send button
+    /// (e.g. disable it while the service is busy) and reset it when they want.
+    public func setSendEnabled(_ enabled: Bool?) {
+        inputBar.setSendEnabled(enabled)
+    }
+}
+
 private extension ChatCollectionViewController {
     func setupInputBar() {
         inputBar.translatesAutoresizingMaskIntoConstraints = false
