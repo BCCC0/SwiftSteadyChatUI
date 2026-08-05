@@ -46,10 +46,16 @@ final class ThinkingStreamingTests: ChatUITestBase {
     }
 
     /// Toggling the thinking block must flip its STATUS: collapsed by default
-    /// (content hidden → not hittable), expand → content visible (hittable),
-    /// collapse → hidden again. Toggled 3× to prove the status toggles
-    /// consistently. Uses `--seed-thinking` (a normal reply, a user prompt, then
-    /// a reply with thinking — both blocks finished, the post-stream state).
+    /// (content hidden), expand → content visible, collapse → hidden again.
+    /// Toggled 3× to prove the status toggles consistently.
+    ///
+    /// The observable is the message's HEIGHT, not `isHittable`: XCUITest's
+    /// snapshot cannot see the collapsed state (SwiftUI `opacity(0)` +
+    /// `maxHeight(0)` + `clipped()` + `allowsHitTesting(false)` keep the inner
+    /// textView reported as hittable — verified, the collapse itself works and
+    /// shrinks the message ~105 pt). Uses `--seed-thinking` (a normal reply, a
+    /// user prompt, then a reply with thinking — both blocks finished, the
+    /// post-stream state; the thinking message is the last visible one).
     func testThinkingToggleStatus() throws {
         app.terminate()
         app.launchArguments = ["--seed-thinking"]
@@ -66,21 +72,27 @@ final class ThinkingStreamingTests: ChatUITestBase {
         let toggle = app.buttons["thinking-toggle"].firstMatch
         XCTAssertTrue(toggle.waitForExistence(timeout: 10), "Thinking toggle never appeared")
 
-        // The thinking content is collapsed by default (maxHeight 0 / opacity 0),
-        // so it is not hittable.
-        let thinking = app.textViews.matching(NSPredicate(format: "label CONTAINS %@", "Let me reason")).firstMatch
-        XCTAssertFalse(thinking.isHittable, "Thinking should be collapsed (hidden) by default")
+        func messageHeight() -> CGFloat {
+            visibleMessages().last?.frame.height ?? -1
+        }
+
+        // Collapsed by default — the shortest the message gets.
+        let collapsedHeight = messageHeight()
 
         for i in 1...3 {
-            toggle.tap()  // expand
+            toggle.tap()  // expand — the thinking content reveals, message grows
             XCTAssertTrue(waitForStableLayout(timeout: 20), "Layout did not settle after expand \(i)")
-            print(">>> thinking toggle \(i): expand → status \(thinking.isHittable ? "expanded" : "collapsed")")
-            XCTAssertTrue(thinking.isHittable, "Toggle \(i): thinking did not expand (status should be expanded)")
+            let expandedHeight = messageHeight()
+            print(">>> thinking toggle \(i): expand \(collapsedHeight) → \(expandedHeight)")
+            XCTAssertGreaterThan(expandedHeight, collapsedHeight + 40,
+                "Toggle \(i): thinking did not expand (message should grow by the thinking height)")
 
-            toggle.tap()  // collapse
+            toggle.tap()  // collapse — the thinking content hides, message shrinks
             XCTAssertTrue(waitForStableLayout(timeout: 20), "Layout did not settle after collapse \(i)")
-            print(">>> thinking toggle \(i): collapse → status \(thinking.isHittable ? "expanded" : "collapsed")")
-            XCTAssertFalse(thinking.isHittable, "Toggle \(i): thinking did not collapse (status should be collapsed)")
+            let reCollapsedHeight = messageHeight()
+            print(">>> thinking toggle \(i): collapse \(expandedHeight) → \(reCollapsedHeight)")
+            XCTAssertLessThan(reCollapsedHeight, expandedHeight - 40,
+                "Toggle \(i): thinking did not collapse (message should shrink by the thinking height)")
         }
     }
 }

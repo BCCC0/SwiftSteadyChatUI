@@ -5,7 +5,10 @@ import XCTest
 final class KeyboardPushTests: ChatUITestBase {
     override func setUpWithError() throws {
         continueAfterFailure = false
-        app.launchArguments = ["--seed-messages", "8"]
+        // --no-auto-send: these tests measure keyboard math against a STATIC
+        // seeded conversation; the demo auto-send stream would race every
+        // measurement (see docs/superpowers/reports/2026-08-05-ui-test-failures.md).
+        app.launchArguments = ["--seed-messages", "8", "--no-auto-send"]
         app.launch()
     }
 
@@ -222,7 +225,9 @@ final class KeyboardPushTests: ChatUITestBase {
     /// bar must stay small (~30pt), not ~300pt.
     func testShortContentNoBlankBelowLastMessage() throws {
         app.terminate()
-        app.launchArguments = []
+        // --no-auto-send: a fresh conversation with no demo stream injected, so
+        // each prompt's reply is the only live message measured.
+        app.launchArguments = ["--no-auto-send"]
         app.launch()
 
         let tv = app.textViews["input-textview"]
@@ -271,7 +276,7 @@ final class KeyboardPushTests: ChatUITestBase {
     func testPushUpNotDoubledForShortContent() throws {
         func gapToInputBar(seed: Int) -> CGFloat? {
             app.terminate()
-            app.launchArguments = ["--seed-messages", "\(seed)"]
+            app.launchArguments = ["--seed-messages", "\(seed)", "--no-auto-send"]
             app.launch()
             let tv = app.textViews["input-textview"]
             guard tv.waitForExistence(timeout: 10) else { return nil }

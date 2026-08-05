@@ -272,6 +272,13 @@ public final class StubChatService: ChatService {
            let count = Int(countStr) {
             service.seedMessages(count: count)
         }
+        // UI tests opt out of the demo auto-send so keyboard measurements run
+        // against a static conversation (the auto-send streaming bubble otherwise
+        // races every measurement — see docs/superpowers/reports/2026-08-05-ui-test-failures.md).
+        // Default launches (no args) still auto-send for the demo.
+        if args.contains("--no-auto-send") {
+            service.autoSendText = nil
+        }
         return service
     }
 

@@ -32,10 +32,22 @@ class ChatUITestBase: XCTestCase {
     /// Message bubbles sorted by vertical position (top to bottom). Matches by
     /// accessibility identifier, so it works on the SwiftUI content hosted in
     /// the collection cells.
+    ///
+    /// Querying is race-resistant: `.count` is snapshotted first (safe — the
+    /// per-element index race only bites binding), then elements are bound by
+    /// index. A live stream insert between the snapshot and a bind can still
+    /// shift the list, so callers that query while streaming should re-query
+    /// (see waitForStableLayout), but the double-`allElementsBoundByIndex`
+    /// window that produced "No matches found for Element at index N" is gone.
     func visibleMessages() -> [XCUIElement] {
-        let user = app.descendants(matching: .any).matching(identifier: "user-msg").allElementsBoundByIndex
-        let assistant = app.descendants(matching: .any).matching(identifier: "assistant-msg").allElementsBoundByIndex
-        return (user + assistant).filter { $0.exists }.sorted { $0.frame.minY < $1.frame.minY }
+        let userQuery = app.descendants(matching: .any).matching(identifier: "user-msg")
+        let assistantQuery = app.descendants(matching: .any).matching(identifier: "assistant-msg")
+        var result: [XCUIElement] = []
+        let userCount = userQuery.count
+        let assistantCount = assistantQuery.count
+        for i in 0..<userCount { result.append(userQuery.element(boundBy: i)) }
+        for i in 0..<assistantCount { result.append(assistantQuery.element(boundBy: i)) }
+        return result.filter { $0.exists }.sorted { $0.frame.minY < $1.frame.minY }
     }
 
     /// The (single) assistant bubble — the streaming reply.
