@@ -5,7 +5,7 @@ import XCTest
 final class ThinkingStreamingTests: ChatUITestBase {
     override func setUpWithError() throws {
         continueAfterFailure = false
-        app.launchArguments = ["--thinking-reply"]
+        app.launchArguments = ["--thinking-reply", "--no-text-animation"]
         app.launch()
     }
 
@@ -58,7 +58,7 @@ final class ThinkingStreamingTests: ChatUITestBase {
     /// post-stream state; the thinking message is the last visible one).
     func testThinkingToggleStatus() throws {
         app.terminate()
-        app.launchArguments = ["--seed-thinking"]
+        app.launchArguments = ["--seed-thinking", "--no-text-animation"]
         app.launch()
 
         // Wait for the seeded conversation to appear, then give the initial

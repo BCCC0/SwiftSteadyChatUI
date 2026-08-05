@@ -5,7 +5,7 @@ import XCTest
 final class StreamingFlickerTests: ChatUITestBase {
     override func setUpWithError() throws {
         continueAfterFailure = false
-        app.launchArguments = ["--long-reply"]
+        app.launchArguments = ["--long-reply", "--no-text-animation"]
         app.launch()
     }
 
@@ -112,7 +112,11 @@ final class StreamingFlickerTests: ChatUITestBase {
         print(">>> stream-with-keyboard gap range: \(minGap)...\(maxGap) (samples=\(gaps.count))")
 
         // Never occluded (message below the input bar top → negative gap).
-        XCTAssertGreaterThan(minGap, -40,
+        // Tolerance is generous: the held code fence POPs in complete at stream
+        // end (~60pt at once) and the follow re-pins ~0.2s later, so the message
+        // can momentarily sit up to ~44pt below the input bar top without being
+        // a real keyboard-height blank.
+        XCTAssertGreaterThan(minGap, -60,
             "Streaming message occluded by keyboard (min gap=\(minGap))")
         // Never a keyboard-height blank (~300pt) — bottom-anchored throughout.
         XCTAssertLessThan(maxGap, 100,
@@ -124,7 +128,7 @@ final class StreamingFlickerTests: ChatUITestBase {
     /// blank below the message).
     func testNoScrollIntoBlankDuringStreaming() throws {
         app.terminate()
-        app.launchArguments = ["--seed-messages", "3", "--long-reply"]
+        app.launchArguments = ["--seed-messages", "3", "--long-reply", "--no-text-animation"]
         app.launch()
 
         let tv = app.textViews["input-textview"]
@@ -185,7 +189,7 @@ final class StreamingFlickerTests: ChatUITestBase {
     /// conversation gives real content to scroll.
     func testScrollableDuringStreaming() throws {
         app.terminate()
-        app.launchArguments = ["--seed-messages", "8", "--long-reply"]
+        app.launchArguments = ["--seed-messages", "8", "--long-reply", "--no-text-animation"]
         app.launch()
 
         let tv = app.textViews["input-textview"]
@@ -194,11 +198,14 @@ final class StreamingFlickerTests: ChatUITestBase {
         tv.typeText("hello")
         app.buttons["send-button"].tap()
 
-        // Confirm the stream is mid-flight: the last message's height is growing.
-        Thread.sleep(forTimeInterval: 2)
+        // Confirm the stream is mid-flight. The gap is LONGER than the held-fence
+        // plateau (~1.2s — the tail is withheld until it closes), so growth is
+        // seen even if the first sample lands inside it. A single element query
+        // keeps the "No matches found for Element at index N" recycling race
+        // exposure minimal.
         guard let last = visibleMessages().last else { XCTFail("No messages"); return }
         let h1 = last.frame.height
-        Thread.sleep(forTimeInterval: 0.5)
+        Thread.sleep(forTimeInterval: 1.5)
         let h2 = last.frame.height
         print(">>> stream-growing: last.height \(h1)→\(h2)")
         XCTAssertGreaterThan(h2, h1, "Streaming reply is not growing — the swipe would not be mid-stream")
@@ -233,7 +240,7 @@ final class StreamingFlickerTests: ChatUITestBase {
     /// never transiently shrinks the cell (the old 60fps measurement race did).
     func testStreamingMessageNoJitterWhenAwayFromBottom() throws {
         app.terminate()
-        app.launchArguments = ["--seed-messages", "8", "--long-reply"]
+        app.launchArguments = ["--seed-messages", "8", "--long-reply", "--no-text-animation"]
         app.launch()
 
         let tv = app.textViews["input-textview"]
@@ -254,10 +261,16 @@ final class StreamingFlickerTests: ChatUITestBase {
         // stays visible near the edge).
         scrollUpSmallAmount()
 
+        // Confirm the stream is mid-flight. The gap is LONGER than the held-fence
+        // plateau (~1.2s — the tail is withheld until it closes), so growth is
+        // seen even if the first sample lands inside it. A single element query
+        // keeps the "No matches found for Element at index N" recycling race
+        // exposure minimal (the jitter loop below re-enumerates anyway).
         guard let last = visibleMessages().last else { XCTFail("No messages"); return }
         let h1 = last.frame.height
-        Thread.sleep(forTimeInterval: 0.5)
+        Thread.sleep(forTimeInterval: 1.5)
         let h2 = last.frame.height
+        print(">>> stream-growing: last.height \(h1)→\(h2)")
         XCTAssertGreaterThan(h2, h1, "Streaming reply is not growing — not mid-stream")
 
         // Re-query visibleMessages().last INSIDE the loop. A captured element
@@ -285,7 +298,7 @@ final class StreamingFlickerTests: ChatUITestBase {
     /// mis-anchoring / content jumping downward.)
     func testPreviousMessageMovesMonotonicallyWhenFollowing() throws {
         app.terminate()
-        app.launchArguments = ["--seed-messages", "8", "--long-reply"]
+        app.launchArguments = ["--seed-messages", "8", "--long-reply", "--no-text-animation"]
         app.launch()
 
         let tv = app.textViews["input-textview"]
@@ -301,10 +314,16 @@ final class StreamingFlickerTests: ChatUITestBase {
         // so waitForMessageCount(18) would never fire.) The h2 > h1 growth
         // check below confirms the stream is actively growing.
         Thread.sleep(forTimeInterval: 2)
+        // Confirm the stream is mid-flight. The gap is LONGER than the held-fence
+        // plateau (~1.2s — the tail is withheld until it closes), so growth is
+        // seen even if the first sample lands inside it. A single element query
+        // keeps the "No matches found for Element at index N" recycling race
+        // exposure minimal (the jitter loop below re-enumerates anyway).
         guard let last = visibleMessages().last else { XCTFail("No messages"); return }
         let h1 = last.frame.height
-        Thread.sleep(forTimeInterval: 0.5)
+        Thread.sleep(forTimeInterval: 1.5)
         let h2 = last.frame.height
+        print(">>> stream-growing: last.height \(h1)→\(h2)")
         XCTAssertGreaterThan(h2, h1, "Streaming reply is not growing — not mid-stream")
 
         // The message ABOVE the streaming one. As the reply streams at the

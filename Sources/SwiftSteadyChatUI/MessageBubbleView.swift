@@ -6,6 +6,10 @@ import SwiftUI
 public struct MessageBubbleView: View {
     public let message: StreamingMessage
     public let isInline: Bool
+    /// Fade streamed text words in one-by-one (mirrors
+    /// `ChatUIConfig.streamingAnimateText`; UI automation disables it via the
+    /// sample's `--no-text-animation` launch arg).
+    public let animateStreamingText: Bool
     /// Called when an internal state change alters this bubble's intrinsic
     /// height (a thinking block expands/collapses), so the hosting controller
     /// can re-measure the cell. Nil for static bubbles.
@@ -14,10 +18,12 @@ public struct MessageBubbleView: View {
     public init(
         message: StreamingMessage,
         isInline: Bool = false,
+        animateStreamingText: Bool = true,
         onLayoutChange: (() -> Void)? = nil
     ) {
         self.message = message
         self.isInline = isInline
+        self.animateStreamingText = animateStreamingText
         self.onLayoutChange = onLayoutChange
     }
 
@@ -37,7 +43,11 @@ public struct MessageBubbleView: View {
             // thinking header) to the trailing edge.
             VStack(alignment: .trailing, spacing: 4) {
                 ForEach(message.blocks) { block in
-                    MessageBlockBubble(block: block, onLayoutChange: onLayoutChange)
+                    MessageBlockBubble(
+                        block: block,
+                        animateStreamingText: animateStreamingText,
+                        onLayoutChange: onLayoutChange
+                    )
                 }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -66,6 +76,8 @@ public struct MessageBubbleView: View {
 /// else placeholder.
 internal struct MessageBlockBubble: View {
     let block: StreamingMessage.MessageBlock
+    /// Fade streamed text words in one-by-one (see `MessageBubbleView`).
+    let animateStreamingText: Bool
     /// Notifies the hosting controller to re-measure after an expand/collapse
     /// changes this bubble's intrinsic height.
     let onLayoutChange: (() -> Void)?
@@ -74,9 +86,11 @@ internal struct MessageBlockBubble: View {
 
     init(
         block: StreamingMessage.MessageBlock,
+        animateStreamingText: Bool = true,
         onLayoutChange: (() -> Void)? = nil
     ) {
         self.block = block
+        self.animateStreamingText = animateStreamingText
         self.onLayoutChange = onLayoutChange
     }
 
@@ -169,7 +183,7 @@ internal struct MessageBlockBubble: View {
             MarkdownView(text: block.content ?? "")
                 .transition(.identity)
         } else if let source = block.streamSource {
-            ProgressiveRevealMarkdown(source: source)
+            ProgressiveRevealMarkdown(source: source, animateText: animateStreamingText)
                 .transition(.identity)
         } else {
             HStack {
@@ -199,7 +213,7 @@ internal struct MessageBlockBubble: View {
         if block.isStreamFinished {
             MarkdownView(text: block.content ?? "")
         } else if let source = block.streamSource {
-            ProgressiveRevealMarkdown(source: source)
+            ProgressiveRevealMarkdown(source: source, animateText: animateStreamingText)
         } else {
             // Empty placeholder while waiting for the reply to start.
             Text("")
@@ -221,6 +235,13 @@ internal struct MessageBlockBubble: View {
 /// coalescing reduces it.
 private struct ProgressiveRevealMarkdown: View {
     let source: ChatStreamSource
+    /// Fade streamed text words in one-by-one (see `MessageBubbleView`).
+    let animateText: Bool
+
+    init(source: ChatStreamSource, animateText: Bool = true) {
+        self.source = source
+        self.animateText = animateText
+    }
 
     /// The committed window height. Starts small (the first render is a
     /// fraction of the eventual reply) and only ever grows — monotonic, so the
@@ -232,7 +253,7 @@ private struct ProgressiveRevealMarkdown: View {
         RenderedHeightObserver(
             content: StreamedMarkdownView(
                 source: source,
-                config: MarkdownRenderConfig(shouldAnimateText: true)
+                config: MarkdownRenderConfig(shouldAnimateText: animateText)
             )
         ) { h in
             if h > revealedHeight { revealedHeight = h }

@@ -370,21 +370,29 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
 
     // MARK: Cached hosting controller
 
-    func hostingController(for message: StreamingMessage) -> UIHostingController<RenderedHeightObserver<MessageBubbleView>> {
-        if let existing = hostingControllers[message.id] {
-            return existing
-        }
-        // The whole message is wrapped in the RenderedHeightObserver: its
-        // onGeometryChange reports the message's TOTAL ideal height on every
-        // render growth, which drives the streaming cell's height (sizeForItemAt).
-        let host = UIHostingController(rootView: RenderedHeightObserver(
+    /// Builds the message's hosting root view: the whole message wrapped in a
+    /// RenderedHeightObserver whose onGeometryChange reports the message's TOTAL
+    /// ideal height on every render growth, driving the streaming cell's height.
+    /// Carries the `streamingAnimateText` config knob into the bubble.
+    private func makeRootView(
+        for message: StreamingMessage
+    ) -> RenderedHeightObserver<MessageBubbleView> {
+        RenderedHeightObserver(
             content: MessageBubbleView(
                 message: message,
+                animateStreamingText: config.streamingAnimateText,
                 onLayoutChange: { [weak self] in self?.onBubbleHeightChanged() }
             )
         ) { [weak self] h in
             self?.onStreamingHeightChange(h, for: message.id)
-        })
+        }
+    }
+
+    func hostingController(for message: StreamingMessage) -> UIHostingController<RenderedHeightObserver<MessageBubbleView>> {
+        if let existing = hostingControllers[message.id] {
+            return existing
+        }
+        let host = UIHostingController(rootView: makeRootView(for: message))
         host.sizingOptions = .intrinsicContentSize
         host.view.translatesAutoresizingMaskIntoConstraints = false
         host.view.backgroundColor = .clear

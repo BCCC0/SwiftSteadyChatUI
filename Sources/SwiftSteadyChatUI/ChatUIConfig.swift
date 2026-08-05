@@ -11,6 +11,10 @@ public struct ChatUIConfig: Sendable {
     /// Default `8` = the validated source's `minimumLineSpacing`; changing it
     /// alters the validated layout the UI tests were verified against.
     public var messageSpacing: CGFloat
+    /// Fade streamed text words in one-by-one while streaming (default `true`).
+    /// The UI automation suite launches the sample with `--no-text-animation`
+    /// to exercise the stable (non-animated) render.
+    public var streamingAnimateText: Bool
     /// Settle-loop tolerances (see `ChatCollectionViewController`).
     public var settleMaxTicks: Int
     public var settleStableTicks: Int
@@ -20,6 +24,7 @@ public struct ChatUIConfig: Sendable {
         dismissKeyboardOnSend: Bool = true,
         showsScrollToBottomButton: Bool = true,
         messageSpacing: CGFloat = 8,
+        streamingAnimateText: Bool = true,
         settleMaxTicks: Int = 24,
         settleStableTicks: Int = 5,
         settleTolerance: CGFloat = 0.5
@@ -27,6 +32,7 @@ public struct ChatUIConfig: Sendable {
         self.dismissKeyboardOnSend = dismissKeyboardOnSend
         self.showsScrollToBottomButton = showsScrollToBottomButton
         self.messageSpacing = messageSpacing
+        self.streamingAnimateText = streamingAnimateText
         self.settleMaxTicks = settleMaxTicks
         self.settleStableTicks = settleStableTicks
         self.settleTolerance = settleTolerance
