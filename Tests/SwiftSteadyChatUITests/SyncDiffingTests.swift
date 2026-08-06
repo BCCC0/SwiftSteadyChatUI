@@ -24,9 +24,7 @@ final class SyncDiffingTests {
     }
 
     private func makeMessage(_ id: UUID, _ content: String) -> StreamingMessage {
-        StreamingMessage(id: id, blocks: [
-            .init(kind: .reply, content: content, isStreamFinished: true)
-        ])
+        StreamingMessage(id: id, kind: .reply, content: content, isStreamFinished: true)
     }
 
     private func makeLoaded(_ svc: Stub) -> ChatCollectionViewController {
@@ -76,7 +74,7 @@ final class SyncDiffingTests {
         svc.messages = [makeMessage(id, "new")]
         svc.onMessagesChanged?()
         #expect(vc.numberOfMessages == 1)
-        #expect(vc.messages.first?.blocks.first?.content == "new")  // internal messages accessor (see note below)
+        #expect(vc.messages.first?.content == "new")  // internal messages accessor (see note below)
     }
 
     @Test("static messages array mid-stream keeps count stable (no reload)")
@@ -84,9 +82,9 @@ final class SyncDiffingTests {
         let svc = Stub()
         let vc = makeLoaded(svc)
         let source = ChatStreamSource()
-        let streaming = StreamingMessage(id: UUID(), blocks: [
-            .init(kind: .reply, content: "", streamSource: source, isStreamFinished: false)
-        ])
+        let streaming = StreamingMessage(
+            id: UUID(), kind: .reply, content: "", streamSource: source, isStreamFinished: false
+        )
         svc.messages = [streaming]
         svc.onMessagesChanged?()
         #expect(vc.numberOfMessages == 1)

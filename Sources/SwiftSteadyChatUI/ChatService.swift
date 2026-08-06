@@ -5,7 +5,7 @@ import Foundation
 /// Conform your app's chat service to this protocol and hand it to
 /// `ChatCollectionViewController`/`ChatScreen`. The UI layer observes
 /// `messages` and calls `sendMessage(_:)`; the service streams text via
-/// `ChatStreamSource` (see `MessageBlock.streamSource`).
+/// `ChatStreamSource` (see `StreamingMessage.streamSource`).
 @MainActor
 public protocol ChatService: AnyObject {
     /// The current message list. **Must stay static mid-stream** — text flows

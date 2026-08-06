@@ -299,9 +299,9 @@ private extension ChatCollectionViewController {
     }
 
     func updateStreamingState() {
-        // A message is streaming while any reply-class block is unfinished. A
-        // `.user` block is always finished, so only thinking/reply stream.
-        activeStreamingID = messages.last(where: { $0.blocks.contains { $0.kind != .user && !$0.isStreamFinished } })?.id
+        // A message is streaming while a thinking/reply message is unfinished.
+        // A `.user` message is always finished, so only thinking/reply stream.
+        activeStreamingID = messages.last(where: { $0.isStreaming })?.id
         // Drop the monotonic height for messages that finished (or were
         // removed) — the finished cell re-measures via systemLayoutSizeFitting.
         // Streaming messages keep their observer-driven height.
@@ -401,7 +401,7 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
         if let cached = estimatedHeights[msg.id] {
             h = cached
         } else {
-            let text = msg.blocks.compactMap { $0.content }.joined()
+            let text = msg.content ?? ""
             let charsPerLine = max(20, Int(width / 10))
             let lines = max(1, text.count / charsPerLine)
             h = CGFloat(lines) * 22 + 40

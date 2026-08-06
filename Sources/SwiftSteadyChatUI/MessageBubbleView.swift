@@ -11,9 +11,12 @@ public struct MessageBubbleView: View {
     /// sample's `--no-text-animation` launch arg).
     public let animateStreamingText: Bool
     /// Called when an internal state change alters this bubble's intrinsic
-    /// height (a thinking block expands/collapses), so the hosting controller
-    /// can re-measure the cell. Nil for static bubbles.
+    /// height (a thinking card expands/collapses), so the hosting controller can
+    /// re-measure the cell. Nil for static bubbles.
     internal let onLayoutChange: (() -> Void)?
+    /// Whether the thinking card is expanded. A thinking message renders its
+    /// content collapsed by default; the toggle reveals it.
+    @State private var thinkingExpanded = false
 
     public init(
         message: StreamingMessage,
@@ -28,92 +31,34 @@ public struct MessageBubbleView: View {
     }
 
     public var body: some View {
-        // Top-aligned: the bubble grows DOWNWARD from its top. Bottom-alignment
-        // made a too-short cell push the streaming content UP over the previous
-        // message (the streaming overlay).
         HStack(alignment: .top, spacing: 6) {
-            if message.role == .user {
-                Spacer(minLength: isInline ? 40 : 60)
-            }
-
-            // Deliberate design (2026-08-05): the bubble column fills the
-            // available width, so assistant bubbles (including an EMPTY streaming
-            // block, a slim bar with no intrinsic width) span the full bubble
-            // width. Trailing alignment pins compact blocks (user prompts, the
-            // thinking header) to the trailing edge.
-            VStack(alignment: .trailing, spacing: 4) {
-                ForEach(message.blocks) { block in
-                    MessageBlockBubble(
-                        block: block,
-                        animateStreamingText: animateStreamingText,
-                        onLayoutChange: onLayoutChange
-                    )
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-
-            if message.role == .assistant {
-                Spacer(minLength: isInline ? 40 : 60)
-            }
+            if message.isUser { Spacer(minLength: isInline ? 40 : 60) }
+            bubble
+                .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
+            if !message.isUser { Spacer(minLength: isInline ? 40 : 60) }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, isInline ? 0 : 2)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(message.role == .user ? "user-msg" : "assistant-msg")
+        .accessibilityIdentifier(message.isUser ? "user-msg" : "assistant-msg")
     }
 
-    /// Message-level: every block renders statically (no live stream).
-    /// Test-visible (not API) — asserted by CacheEvictionTests.
+    /// Test-visible render decision (not API) — asserted by CacheEvictionTests.
     internal var usesStaticMarkdown: Bool { message.isStreamFinished }
-}
 
-// MARK: - One block
-
-/// Renders one `MessageBlock` by its `kind` + finish/source state — the
-/// per-block render derivation in the design spec:
-/// `.user` → static blue text; `isStreamFinished` → static `MarkdownView`
-/// (finished WINS even when a source is present); live source → streamed;
-/// else placeholder.
-internal struct MessageBlockBubble: View {
-    let block: StreamingMessage.MessageBlock
-    /// Fade streamed text words in one-by-one (see `MessageBubbleView`).
-    let animateStreamingText: Bool
-    /// Notifies the hosting controller to re-measure after an expand/collapse
-    /// changes this bubble's intrinsic height.
-    let onLayoutChange: (() -> Void)?
-
-    @State private var thinkingExpanded = false
-
-    init(
-        block: StreamingMessage.MessageBlock,
-        animateStreamingText: Bool = true,
-        onLayoutChange: (() -> Void)? = nil
-    ) {
-        self.block = block
-        self.animateStreamingText = animateStreamingText
-        self.onLayoutChange = onLayoutChange
-    }
-
-    var body: some View {
-        switch block.kind {
-        case .user:
-            userBubble
-        case .thinking:
-            thinkingBubble
-        case .reply:
-            replyBubble
+    @ViewBuilder
+    private var bubble: some View {
+        switch message.kind {
+        case .user: userBubble
+        case .thinking: thinkingBubble
+        case .reply: replyBubble
         }
-    }
-
-    /// Test-visible render decision (not API).
-    internal var usesStaticMarkdown: Bool {
-        block.kind == .user || block.isStreamFinished
     }
 
     // MARK: User prompt — instant static blue bubble (never streams)
 
     private var userBubble: some View {
-        Text(block.content ?? "")
+        Text(message.content ?? "")
             .textSelection(.enabled)
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
@@ -122,35 +67,20 @@ internal struct MessageBlockBubble: View {
             .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
-    // MARK: Thinking — collapsible, streams markdown
+    // MARK: Thinking — collapsible, streams markdown, left-aligned
 
     private var thinkingBubble: some View {
         VStack(spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    thinkingExpanded.toggle()
-                }
-                // The expand/collapse changes this bubble's intrinsic height,
-                // so the hosting cell must be re-measured (nothing else will
-                // trigger it once the settle loop has stopped).
+                withAnimation(.easeInOut(duration: 0.2)) { thinkingExpanded.toggle() }
+                // Expand/collapse changes this bubble's intrinsic height, so the
+                // hosting cell must be re-measured.
                 onLayoutChange?()
             } label: {
                 HStack(spacing: 4) {
-                    Image(systemName: "brain.head.profile")
-                        .font(.caption)
-                    Text("Show thinking")
-                        .font(.caption2)
+                    Image(systemName: "brain.head.profile").font(.caption)
+                    Text("Show thinking").font(.caption2)
                     Spacer()
-                    // Renders only on re-created controllers: the cached
-                    // rootView is frozen, so a live finished message keeps
-                    // this block's isStreamFinished false (streamed view shows
-                    // the final text instead). On reload / post-eviction
-                    // scroll-back the caption appears.
-                    if block.isStreamFinished {
-                        Text("Done thinking")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
                     Image(systemName: "chevron.down")
                         .font(.caption2)
                         .rotationEffect(.degrees(thinkingExpanded ? 0 : -90))
@@ -179,26 +109,22 @@ internal struct MessageBlockBubble: View {
 
     @ViewBuilder
     private var thinkingContent: some View {
-        if block.isStreamFinished {
-            MarkdownView(text: block.content ?? "")
-                .transition(.identity)
-        } else if let source = block.streamSource {
+        if message.isStreamFinished {
+            MarkdownView(text: message.content ?? "").transition(.identity)
+        } else if let source = message.streamSource {
             ProgressiveRevealMarkdown(source: source, animateText: animateStreamingText)
                 .transition(.identity)
         } else {
             HStack {
-                Text("Thinking...")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("Thinking...").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                ProgressView()
-                    .scaleEffect(0.6)
+                ProgressView().scaleEffect(0.6)
             }
             .padding(.vertical, 4)
         }
     }
 
-    // MARK: Reply — normal markdown bubble, always visible
+    // MARK: Reply — normal markdown bubble, always visible, left-aligned
 
     private var replyBubble: some View {
         replyContent
@@ -210,14 +136,13 @@ internal struct MessageBlockBubble: View {
 
     @ViewBuilder
     private var replyContent: some View {
-        if block.isStreamFinished {
-            MarkdownView(text: block.content ?? "")
-        } else if let source = block.streamSource {
+        if message.isStreamFinished {
+            MarkdownView(text: message.content ?? "")
+        } else if let source = message.streamSource {
             ProgressiveRevealMarkdown(source: source, animateText: animateStreamingText)
         } else {
             // Empty placeholder while waiting for the reply to start.
-            Text("")
-                .frame(minHeight: 24)
+            Text("").frame(minHeight: 24)
         }
     }
 }

@@ -22,9 +22,7 @@ final class LongHistoryScaleTests {
     }
 
     private func makeFinished(_ n: Int) -> StreamingMessage {
-        StreamingMessage(id: UUID(), blocks: [
-            .init(kind: .reply, content: "msg \(n)", isStreamFinished: true)
-        ])
+        StreamingMessage(id: UUID(), kind: .reply, content: "msg \(n)", isStreamFinished: true)
     }
 
     private func measureLiveCount(after total: Int) -> Int {

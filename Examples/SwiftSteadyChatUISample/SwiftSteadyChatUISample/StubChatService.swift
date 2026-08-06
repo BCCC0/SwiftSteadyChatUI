@@ -130,33 +130,35 @@ public final class StubChatService: ChatService {
     public func seedMessages(count: Int) {
         for i in 0..<count {
             let text = responsePool[i % responsePool.count]
-            messages.append(StreamingMessage(id: UUID(), blocks: [
-                .init(kind: .user, content: "Test message \(i + 1)", isStreamFinished: true)
-            ]))
-            messages.append(StreamingMessage(id: UUID(), blocks: [
-                .init(kind: .reply, content: text, isStreamFinished: true)
-            ]))
+            messages.append(StreamingMessage(
+                id: UUID(), kind: .user, content: "Test message \(i + 1)", isStreamFinished: true
+            ))
+            messages.append(StreamingMessage(
+                id: UUID(), kind: .reply, content: text, isStreamFinished: true
+            ))
         }
         onMessagesChanged?()
     }
 
     /// Seed a conversation for the thinking-toggle UI test (`--seed-thinking`):
-    /// a NORMAL assistant reply, a user prompt, then a reply WITH thinking (both
-    /// blocks FINISHED — the post-stream state). The thinking message is last,
-    /// so the test toggles its thinking block and checks the expanded/collapsed
-    /// status — no message below to index into, which keeps the UI test
-    /// deterministic.
+    /// a NORMAL assistant reply, a user prompt, then a thinking + reply pair
+    /// (all messages FINISHED — the post-stream state). The thinking message is
+    /// last, so the test toggles its thinking bubble and checks the
+    /// expanded/collapsed status — no message below to index into, which keeps
+    /// the UI test deterministic.
     public func seedThinkingConversation() {
-        messages.append(StreamingMessage(id: UUID(), blocks: [
-            .init(kind: .reply, content: "Seeded normal reply", isStreamFinished: true)
-        ]))
-        messages.append(StreamingMessage(id: UUID(), blocks: [
-            .init(kind: .user, content: "Seed prompt", isStreamFinished: true)
-        ]))
-        messages.append(StreamingMessage(id: UUID(), blocks: [
-            .init(kind: .thinking, content: StubChatService.thinkingText, isStreamFinished: true),
-            .init(kind: .reply, content: StubChatService.longStreamingReply, isStreamFinished: true)
-        ]))
+        messages.append(StreamingMessage(
+            id: UUID(), kind: .reply, content: "Seeded normal reply", isStreamFinished: true
+        ))
+        messages.append(StreamingMessage(
+            id: UUID(), kind: .user, content: "Seed prompt", isStreamFinished: true
+        ))
+        messages.append(StreamingMessage(
+            id: UUID(), kind: .thinking, content: StubChatService.thinkingText, isStreamFinished: true
+        ))
+        messages.append(StreamingMessage(
+            id: UUID(), kind: .reply, content: StubChatService.longStreamingReply, isStreamFinished: true
+        ))
         onMessagesChanged?()
     }
 
@@ -166,31 +168,24 @@ public final class StubChatService: ChatService {
             try? await Task.sleep(for: .milliseconds(50))
         }
 
-        // 1. Instant user prompt (Class 1)
-        messages.append(StreamingMessage(id: UUID(), blocks: [
-            .init(kind: .user, content: text, isStreamFinished: true)
-        ]))
+        // 1. Instant user prompt (right-aligned blue).
+        messages.append(StreamingMessage(
+            id: UUID(), kind: .user, content: text, isStreamFinished: true
+        ))
         onMessagesChanged?()
         try? await Task.sleep(for: .milliseconds(50))
-
-        // 2. Reply (Class 2) — optional thinking block + reply block, each streaming
-        let reply = responsePool.randomElement()!
-        let thinkingSource = streamsThinking ? ChatStreamSource() : nil
-        let replySource = ChatStreamSource()
-        let msgID = UUID()
-        var blocks: [StreamingMessage.MessageBlock] = []
-        if let thinkingSource {
-            blocks.append(.init(kind: .thinking, content: "", streamSource: thinkingSource, isStreamFinished: false))
-        }
-        blocks.append(.init(kind: .reply, content: "", streamSource: replySource, isStreamFinished: false))
-        messages.append(StreamingMessage(id: msgID, blocks: blocks))
-        onMessagesChanged?()
 
         isStreaming = true
         defer { isStreaming = false }
 
-        // 3. Stream thinking first (full snapshots), then the reply.
-        if let thinkingSource {
+        // 2. Thinking block (separate collapsible bubble, streams first).
+        if streamsThinking {
+            let thinkingID = UUID()
+            let thinkingSource = ChatStreamSource()
+            messages.append(StreamingMessage(
+                id: thinkingID, kind: .thinking, content: "", streamSource: thinkingSource, isStreamFinished: false
+            ))
+            onMessagesChanged?()
             var acc = ""
             for ch in StubChatService.thinkingText {
                 acc.append(ch)
@@ -198,8 +193,23 @@ public final class StubChatService: ChatService {
                 try? await Task.sleep(for: .milliseconds(charDelayMs))
             }
             thinkingSource.finish()
+            // Replace with the finished message — stored ⟹ finished; source kept alive.
+            if let idx = messages.firstIndex(where: { $0.id == thinkingID }) {
+                messages[idx] = StreamingMessage(
+                    id: thinkingID, kind: .thinking, content: acc, streamSource: thinkingSource, isStreamFinished: true
+                )
+            }
+            onMessagesChanged?()
         }
 
+        // 3. Reply block (separate bubble, streams after the thinking finishes).
+        let reply = responsePool.randomElement()!
+        let replyID = UUID()
+        let replySource = ChatStreamSource()
+        messages.append(StreamingMessage(
+            id: replyID, kind: .reply, content: "", streamSource: replySource, isStreamFinished: false
+        ))
+        onMessagesChanged?()
         var acc = ""
         for ch in reply {
             acc.append(ch)
@@ -207,20 +217,12 @@ public final class StubChatService: ChatService {
             try? await Task.sleep(for: .milliseconds(charDelayMs))
         }
         replySource.finish()
-
-        // 4. Replace with finished blocks — stored ⟹ finished; sources kept alive.
-        guard let idx = messages.firstIndex(where: { $0.id == msgID }) else { return }
-        var finished: [StreamingMessage.MessageBlock] = []
-        if let thinkingSource {
-            finished.append(.init(
-                kind: .thinking, content: StubChatService.thinkingText,
-                streamSource: thinkingSource, isStreamFinished: true
-            ))
+        // Replace with the finished message — stored ⟹ finished; source kept alive.
+        if let idx = messages.firstIndex(where: { $0.id == replyID }) {
+            messages[idx] = StreamingMessage(
+                id: replyID, kind: .reply, content: acc, streamSource: replySource, isStreamFinished: true
+            )
         }
-        finished.append(.init(
-            kind: .reply, content: reply, streamSource: replySource, isStreamFinished: true
-        ))
-        messages[idx] = StreamingMessage(id: msgID, blocks: finished)
         onMessagesChanged?()
     }
 
