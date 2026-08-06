@@ -297,21 +297,30 @@ private extension ChatCollectionViewController {
         updateBottomInset(animated: false, preserveBottom: preserveBottom)
         if preserveBottom { scrollToBottom(animated: false) }
     }
+}
 
+// MARK: - Streaming state (test-visible, not API)
+
+extension ChatCollectionViewController {
+
+    /// Single-last streaming: only the LAST message may stream. An earlier
+    /// unfinished message (e.g. a thinking stream whose reply was already
+    /// appended) is NOT streaming — the reply owns the stream. `streamingHeights`
+    /// is filtered to the active id so a stale monotonic height can't freeze an
+    /// off-list cell; the finished cell re-measures via systemLayoutSizeFitting.
+    /// The settle loop re-measures NON-streaming async content (initial load,
+    /// static markdown parse on append, the finished message on finish).
+    /// Streaming growth is driven by the RenderedHeightObserver → the stored
+    /// height, so the loop must not spin during a stream.
     func updateStreamingState() {
-        // A message is streaming while a thinking/reply message is unfinished.
-        // A `.user` message is always finished, so only thinking/reply stream.
-        activeStreamingID = messages.last(where: { $0.isStreaming })?.id
-        // Drop the monotonic height for messages that finished (or were
-        // removed) — the finished cell re-measures via systemLayoutSizeFitting.
-        // Streaming messages keep their observer-driven height.
-        streamingHeights = streamingHeights.filter { id, _ in
-            messages.first(where: { $0.id == id })?.isStreamFinished == false
+        if let last = messages.last, last.isStreaming {
+            activeStreamingID = last.id
+        } else {
+            activeStreamingID = nil
         }
-        // The settle loop re-measures NON-streaming async content (initial load,
-        // static markdown parse on append, the finished message on finish).
-        // Streaming growth is driven by the RenderedHeightObserver → the stored
-        // height, so the loop must not spin during a stream.
+        streamingHeights = streamingHeights.filter { id, _ in
+            id == activeStreamingID
+        }
         if activeStreamingID == nil {
             scheduleSettle()
         }

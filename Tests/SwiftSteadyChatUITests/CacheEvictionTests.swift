@@ -56,6 +56,34 @@ final class CacheEvictionTests {
         return vc
     }
 
+    @Test("only the last message is considered streaming")
+    func onlyLastStreams() {
+        // Drive updateStreamingState in isolation via the test-visible messages
+        // array (viewDidLoad normally syncs it from the service; this test only
+        // cares about the streaming-state logic).
+        let vc = ChatCollectionViewController(service: StubService(messages: []), config: ChatUIConfig())
+
+        // Happy path: the LAST message is streaming → it is the active one.
+        vc.messages = [
+            StreamingMessage(id: UUID(), kind: .user, content: "hi", isStreamFinished: true),
+            StreamingMessage(id: UUID(), kind: .thinking, content: "hmm", isStreamFinished: true),
+            StreamingMessage(id: UUID(), kind: .reply, content: "", streamSource: ChatStreamSource(), isStreamFinished: false)
+        ]
+        vc.updateStreamingState()
+        #expect(vc.activeStreamingID == vc.messages[2].id)
+
+        // Single-last invariant: an unfinished EARLIER message with a finished
+        // last is NOT streaming — only the last message may stream, so nothing
+        // is active.
+        vc.messages = [
+            StreamingMessage(id: UUID(), kind: .user, content: "hi", isStreamFinished: true),
+            StreamingMessage(id: UUID(), kind: .thinking, content: "hmm", streamSource: ChatStreamSource(), isStreamFinished: false),
+            StreamingMessage(id: UUID(), kind: .reply, content: "done", isStreamFinished: true)
+        ]
+        vc.updateStreamingState()
+        #expect(vc.activeStreamingID == nil)
+    }
+
     @Test("finished messages beyond the eviction window release their hosting controller")
     func evictsFinishedFarMessages() {
         let svc = StubService(messages: (0..<200).map { makeFinished($0) })
