@@ -141,11 +141,11 @@ public final class StubChatService: ChatService {
     }
 
     /// Seed a conversation for the thinking-toggle UI test (`--seed-thinking`):
-    /// a NORMAL assistant reply, a user prompt, then a thinking + reply pair
-    /// (all messages FINISHED — the post-stream state). The thinking message is
-    /// last, so the test toggles its thinking bubble and checks the
-    /// expanded/collapsed status — no message below to index into, which keeps
-    /// the UI test deterministic.
+    /// a NORMAL assistant reply, a user prompt, then a thinking + reply PAIR as
+    /// two separate messages (all messages FINISHED — the post-stream state).
+    /// The thinking message is the 3rd of 4, with a finished reply below it — the
+    /// test toggles the thinking bubble and checks its expand/collapse status
+    /// against the message above it (deterministic — nothing streams underneath).
     public func seedThinkingConversation() {
         messages.append(StreamingMessage(
             id: UUID(), kind: .reply, content: "Seeded normal reply", isStreamFinished: true
