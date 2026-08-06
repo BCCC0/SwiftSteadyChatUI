@@ -75,6 +75,16 @@ final class ThinkingStreamingTests: ChatUITestBase {
         func messageHeight() -> CGFloat {
             visibleMessages().last?.frame.height ?? -1
         }
+        /// The gap between the last message's bottom and the input bar top. A
+        /// stuck-tall CELL (the growth-only observer never reports a shrink)
+        /// leaves a blank below the collapsed bubble, so this gap is the
+        /// observable for "the scroll-view height shrank with the collapse".
+        func gapToInputBar() -> CGFloat {
+            guard let last = visibleMessages().last, let bar = inputBarTop() else {
+                return .greatestFiniteMagnitude
+            }
+            return bar - last.frame.maxY
+        }
 
         // Collapsed by default — the shortest the message gets.
         let collapsedHeight = messageHeight()
@@ -93,6 +103,14 @@ final class ThinkingStreamingTests: ChatUITestBase {
             print(">>> thinking toggle \(i): collapse \(expandedHeight) → \(reCollapsedHeight)")
             XCTAssertLessThan(reCollapsedHeight, expandedHeight - 40,
                 "Toggle \(i): thinking did not collapse (message should shrink by the thinking height)")
+
+            // The CELL (scroll-view height) must shrink with the collapse: a
+            // stuck-tall cell leaves a blank below the collapsed bubble. This
+            // asserts the fix for the "collapse doesn't shrink" bug.
+            let collapseGap = gapToInputBar()
+            print(">>> thinking toggle \(i): gap to input bar \(collapseGap)pt")
+            XCTAssertLessThan(collapseGap, 60,
+                "Toggle \(i): collapse left a \(collapseGap)pt blank — the cell did not shrink")
         }
     }
 }

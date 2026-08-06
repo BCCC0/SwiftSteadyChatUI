@@ -142,23 +142,48 @@ public final class ChatCollectionViewController: UIViewController {
     func onStreamingHeightChange(_ h: CGFloat, for id: UUID) {
         if h > (measuredHeights[id] ?? 0) { measuredHeights[id] = h }
         if h > (streamingHeights[id] ?? 0) { streamingHeights[id] = h }
+        // Track the reported height per toggle state: the growth-only observer
+        // only ever grows, so a collapse/expand must restore the matching cached
+        // height rather than wait for a shrink/growth report.
+        if thinkingExpanded[id] == true {
+            expandedHeights[id] = h
+        } else {
+            collapsedHeights[id] = h
+        }
         scheduleReMeasure()
     }
 
-    /// The thinking toggle (onLayoutChange) changed the message's structure
-    /// (expand/collapse) — clear the monotonic streaming height so sizeForItemAt
-    /// falls back to systemLayoutSizeFitting for the current (possibly
-    /// collapsed) height.
-    func onBubbleHeightChanged() {
-        if let streamingID = activeStreamingID {
-            streamingHeights.removeValue(forKey: streamingID)
+    /// Thinking-expand state per message id (the toggle's `onLayoutChange` does
+    /// not say which direction, so the controller tracks it).
+    private var thinkingExpanded: [UUID: Bool] = [:]
+    /// The message's height with its thinking block COLLAPSED, tracked from the
+    /// observer's growth reports and restored on collapse. The growth-only
+    /// observer never reports a shrink, so without this the cell stays at the
+    /// expanded height (the "collapse doesn't shrink" bug).
+    private var collapsedHeights: [UUID: CGFloat] = [:]
+    /// The message's height with its thinking block EXPANDED, tracked from the
+    /// observer's growth reports and restored on a repeat expand (the observer's
+    /// own lastHeight is growth-only and won't re-report an already-seen height).
+    private var expandedHeights: [UUID: CGFloat] = [:]
+
+    /// The thinking toggle (onLayoutChange) changed this message's structure
+    /// (expand/collapse). Its cell height must move DOWN as well as up: restore
+    /// the cached height matching the new toggle state (the observer won't
+    /// report the reverse direction).
+    func onBubbleHeightChanged(for id: UUID) {
+        let wasExpanded = thinkingExpanded[id] ?? false
+        if wasExpanded {
+            if let compact = collapsedHeights[id] {
+                measuredHeights[id] = compact
+            }
+        } else {
+            if let expanded = expandedHeights[id] {
+                measuredHeights[id] = expanded
+            }
         }
-        // The toggle changed the message's structure (expand/collapse): drop the
-        // committed height so sizeForItemAt re-measures the (possibly collapsed)
-        // height instead of returning the stale monotonic one.
-        if let streamingID = activeStreamingID {
-            measuredHeights.removeValue(forKey: streamingID)
-        }
+        thinkingExpanded[id] = !wasExpanded
+        streamingHeights.removeValue(forKey: id)
+        estimatedHeights.removeValue(forKey: id)
         scheduleReMeasure()
     }
 
@@ -391,7 +416,7 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
             content: MessageBubbleView(
                 message: message,
                 animateStreamingText: config.streamingAnimateText,
-                onLayoutChange: { [weak self] in self?.onBubbleHeightChanged() }
+                onLayoutChange: { [weak self] in self?.onBubbleHeightChanged(for: message.id) }
             )
         ) { [weak self] h in
             self?.onStreamingHeightChange(h, for: message.id)
