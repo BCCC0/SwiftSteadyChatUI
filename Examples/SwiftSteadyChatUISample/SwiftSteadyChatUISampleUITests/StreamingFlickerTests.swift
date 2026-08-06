@@ -261,17 +261,26 @@ final class StreamingFlickerTests: ChatUITestBase {
         // stays visible near the edge).
         scrollUpSmallAmount()
 
-        // Confirm the stream is mid-flight. The gap is LONGER than the held-fence
-        // plateau (~1.2s — the tail is withheld until it closes), so growth is
-        // seen even if the first sample lands inside it. A single element query
-        // keeps the "No matches found for Element at index N" recycling race
-        // exposure minimal (the jitter loop below re-enumerates anyway).
-        guard let last = visibleMessages().last else { XCTFail("No messages"); return }
-        let h1 = last.frame.height
-        Thread.sleep(forTimeInterval: 1.5)
-        let h2 = last.frame.height
-        print(">>> stream-growing: last.height \(h1)→\(h2)")
-        XCTAssertGreaterThan(h2, h1, "Streaming reply is not growing — not mid-stream")
+        // Confirm the stream is mid-flight: poll over a window and require the
+        // max sampled height to exceed the first. Spans the held-fence plateau
+        // (~1.2s) and survives a first sample that lands on a static seeded
+        // message (the streaming cell can briefly slip below the viewport after
+        // the small scroll). 0.5s interval keeps the "No matches found for
+        // Element at index N" recycling-race exposure low.
+        guard let firstHeight = visibleMessages().last?.frame.height else {
+            XCTFail("No messages"); return
+        }
+        var grew = false
+        var maxHeight = firstHeight
+        let growDeadline = Date().addingTimeInterval(3)
+        while Date() < growDeadline {
+            guard let h = visibleMessages().last?.frame.height else { continue }
+            if h > maxHeight { grew = true }
+            maxHeight = max(maxHeight, h)
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        print(">>> stream-growing: first=\(firstHeight) max=\(maxHeight) grew=\(grew)")
+        XCTAssertTrue(grew, "Streaming reply never grew over a 3s window — not mid-stream")
 
         // Re-query visibleMessages().last INSIDE the loop. A captured element
         // re-resolves to a recycled cell once the streaming bubble grows below
@@ -314,17 +323,26 @@ final class StreamingFlickerTests: ChatUITestBase {
         // so waitForMessageCount(18) would never fire.) The h2 > h1 growth
         // check below confirms the stream is actively growing.
         Thread.sleep(forTimeInterval: 2)
-        // Confirm the stream is mid-flight. The gap is LONGER than the held-fence
-        // plateau (~1.2s — the tail is withheld until it closes), so growth is
-        // seen even if the first sample lands inside it. A single element query
-        // keeps the "No matches found for Element at index N" recycling race
-        // exposure minimal (the jitter loop below re-enumerates anyway).
-        guard let last = visibleMessages().last else { XCTFail("No messages"); return }
-        let h1 = last.frame.height
-        Thread.sleep(forTimeInterval: 1.5)
-        let h2 = last.frame.height
-        print(">>> stream-growing: last.height \(h1)→\(h2)")
-        XCTAssertGreaterThan(h2, h1, "Streaming reply is not growing — not mid-stream")
+        // Confirm the stream is mid-flight: poll over a window and require the
+        // max sampled height to exceed the first. Spans the held-fence plateau
+        // (~1.2s) and survives a first sample that lands on a static seeded
+        // message (the streaming cell can briefly slip below the viewport after
+        // the small scroll). 0.5s interval keeps the "No matches found for
+        // Element at index N" recycling-race exposure low.
+        guard let firstHeight = visibleMessages().last?.frame.height else {
+            XCTFail("No messages"); return
+        }
+        var grew = false
+        var maxHeight = firstHeight
+        let growDeadline = Date().addingTimeInterval(3)
+        while Date() < growDeadline {
+            guard let h = visibleMessages().last?.frame.height else { continue }
+            if h > maxHeight { grew = true }
+            maxHeight = max(maxHeight, h)
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        print(">>> stream-growing: first=\(firstHeight) max=\(maxHeight) grew=\(grew)")
+        XCTAssertTrue(grew, "Streaming reply never grew over a 3s window — not mid-stream")
 
         // The message ABOVE the streaming one. As the reply streams at the
         // bottom, this one moves UP (its maxY decreases); it must never move

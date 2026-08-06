@@ -283,6 +283,16 @@ private extension ChatCollectionViewController {
         if activeStreamingID == nil {
             scheduleSettle()
         }
+        // TODO(blank-on-finish): a finished message can leave a ~79pt blank below
+        // its bubble (longer conversations). The growth-only no-jitter observer
+        // (RenderedHeightObserver) commits the MAX streamed height, which
+        // transiently over-shoots the final static render; freezing that height
+        // IS the no-flicker guarantee, at the cost of a post-finish blank.
+        // Clearing measuredHeights[id] here alone does NOT fix it (the frozen
+        // rootView re-renders the reveal at its committed height), and correcting
+        // it at finish (rebuilding the rootView / releasing the reveal lock)
+        // breaks no-flicker with a visible drop. Needs a renderer-side fix;
+        // tolerated by testShortContentNoBlankBelowLastMessage (<100pt).
     }
 }
 

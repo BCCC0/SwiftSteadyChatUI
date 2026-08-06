@@ -34,7 +34,9 @@ final class DemoRecordingTests: DemoUITestBase {
     // MARK: Demo 2 — keyboard push-up → tap background to dismiss
 
     func testDemo2KeyboardPushUpAndDismiss() throws {
-        app.launchArguments = ["--seed-messages", "8"]
+        // --no-auto-send: keyboard demos must show a STATIC conversation, not a
+        // demo auto-send stream racing the push-up (same fix as the UI suite).
+        app.launchArguments = ["--seed-messages", "8", "--no-auto-send"]
         app.launch()
 
         let tv = app.textViews["input-textview"]
@@ -59,7 +61,9 @@ final class DemoRecordingTests: DemoUITestBase {
     // MARK: Demo 3 — scrolled away → keyboard does NOT push content
 
     func testDemo3ScrolledKeyboardNoPushUp() throws {
-        app.launchArguments = ["--seed-messages", "8"]
+        // --no-auto-send: keyboard demos must show a STATIC conversation, not a
+        // demo auto-send stream racing the push-up (same fix as the UI suite).
+        app.launchArguments = ["--seed-messages", "8", "--no-auto-send"]
         app.launch()
 
         let tv = app.textViews["input-textview"]

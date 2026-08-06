@@ -283,8 +283,10 @@ final class KeyboardPushTests: ChatUITestBase {
             // height is the no-flicker guarantee, at the cost of a small (~79pt)
             // blank below the last message after it finishes — pre-existing, and
             // not fixable without a finish-time shrink that breaks no-flicker.
-            // The REAL bug this guards (a ~300pt keyboard-height blank) still
-            // fails well past 100pt.
+            // Tracked as TODO(blank-on-finish) in
+            // ChatCollectionViewController.updateStreamingState. The REAL bug
+            // this guards (a ~300pt keyboard-height blank) still fails well past
+            // 100pt.
             XCTAssertLessThan(toInputBar, 100,
                 "Prompt \(i): last message is \(toInputBar)pt above the input bar — keyboard-height blank below")
         }
