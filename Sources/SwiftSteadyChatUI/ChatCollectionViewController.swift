@@ -175,10 +175,17 @@ public final class ChatCollectionViewController: UIViewController {
         if wasExpanded {
             if let compact = collapsedHeights[id] {
                 measuredHeights[id] = compact
+            } else {
+                // No cached compact height (first toggle before any report, or
+                // after eviction): don't freeze a stale height — fall back so
+                // sizeForItemAt estimates and the observer re-measures.
+                measuredHeights.removeValue(forKey: id)
             }
         } else {
             if let expanded = expandedHeights[id] {
                 measuredHeights[id] = expanded
+            } else {
+                measuredHeights.removeValue(forKey: id)
             }
         }
         thinkingExpanded[id] = !wasExpanded
@@ -624,5 +631,12 @@ extension ChatCollectionViewController {
     private func evict(_ id: UUID) {
         guard let host = hostingControllers.removeValue(forKey: id) else { return }
         host.view.removeFromSuperview()
+        // Drop per-message toggle state with the controller: a re-created
+        // bubble's @State thinkingExpanded resets to false, so the controller's
+        // parallel flags must reset with it (else the direction desyncs and the
+        // wrong cached height is restored). Also bounds these dicts over churn.
+        thinkingExpanded.removeValue(forKey: id)
+        collapsedHeights.removeValue(forKey: id)
+        expandedHeights.removeValue(forKey: id)
     }
 }
