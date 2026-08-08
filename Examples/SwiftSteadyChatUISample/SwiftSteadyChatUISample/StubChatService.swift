@@ -226,6 +226,16 @@ public final class StubChatService: ChatService {
         onMessagesChanged?()
     }
 
+    /// Consumer-side action for the demo's status bar: empties the conversation
+    /// through the service seam. Demonstrates that a consumer-owned top band can
+    /// DRIVE the app, not just observe it. Idle-only — a mid-stream clear would
+    /// orphan the in-flight send task (its reply would never re-appear).
+    public func clearChat() {
+        guard !isStreaming else { return }
+        messages = []
+        onMessagesChanged?()
+    }
+
     /// Build the service from process launch arguments.
     /// - `--long-reply` → deterministic long markdown reply (streaming tests).
     ///   Composes with `--seed-messages` (seeded pairs use the long reply too).

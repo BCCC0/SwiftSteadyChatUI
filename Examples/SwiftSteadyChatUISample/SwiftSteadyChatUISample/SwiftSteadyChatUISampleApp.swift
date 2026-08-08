@@ -16,15 +16,23 @@ struct SwiftSteadyChatUISampleApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ChatScreen(service: service, config: config)
-                .ignoresSafeArea(.keyboard, edges: .bottom)
-                .task {
-                    // Demo helper (`--auto-thinking`): auto-send a prompt shortly
-                    // after launch so the thinking block streams on its own.
-                    guard let prompt = service.autoSendText else { return }
-                    try? await Task.sleep(for: .milliseconds(900))
-                    await service.sendMessage(prompt)
-                }
+            // The demo composes a consumer-owned pinned band above the chat
+            // (StatusBarView — plain SwiftUI wired to StubChatService), showing
+            // the "pinned content above the chat" pattern. The package provides
+            // no screen-chrome hooks; the consumer declares the height and
+            // renders whatever it likes.
+            VStack(spacing: 0) {
+                StatusBarView(service: service)
+                ChatScreen(service: service, config: config)
+                    .ignoresSafeArea(.keyboard, edges: .bottom)
+            }
+            .task {
+                // Demo helper (`--auto-thinking`): auto-send a prompt shortly
+                // after launch so the thinking block streams on its own.
+                guard let prompt = service.autoSendText else { return }
+                try? await Task.sleep(for: .milliseconds(900))
+                await service.sendMessage(prompt)
+            }
         }
     }
 }

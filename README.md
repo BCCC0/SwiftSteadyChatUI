@@ -157,6 +157,28 @@ struct ChatView: View {
 >    is TWO messages — append `.thinking`, stream it, then append `.reply` and
 >    stream it.
 
+### Pinned content above the chat
+
+`ChatScreen` is an opaque full-screen chat — the package provides **no
+screen-chrome hooks** (banners, headers, toolbars). To pin a strip above the
+messages (a status header, a pinned-message banner, an error bar), the consumer
+declares its height and renders whatever it likes, stacked above `ChatScreen`:
+
+```swift
+VStack(spacing: 0) {
+    MyStatusBar(service: service)            // your view; declare the height
+        .frame(height: 44)
+    ChatScreen(service: service, config: config)
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+}
+```
+
+The band is plain SwiftUI owned by your app. It can read your service's live
+state (e.g. `service.messages.last?.isStreaming`) and drive the app through the
+same `ChatService` seam. Because `ChatScreen` handles its own keyboard and
+scroll math inside its bounds, the band above cannot disturb them. The sample
+app demonstrates this with a live status bar (`StatusBarView`).
+
 ### Configuration
 
 `ChatUIConfig` exposes the knobs that matter:
