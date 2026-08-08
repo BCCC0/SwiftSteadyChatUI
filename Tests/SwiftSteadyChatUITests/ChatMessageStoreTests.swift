@@ -44,16 +44,21 @@ struct ChatMessageStoreTests {
         #expect(history[0].isStreamFinished)
     }
 
-    @Test("mid-list delete keeps the remaining order at the store level")
+    @Test("mid-list delete keeps order and next append does not collide")
     func midListDelete() throws {
         let store = try makeStore()
         let cid = UUID()
-        let a = UUID(); let b = UUID(); let c = UUID()
+        let a = UUID(); let b = UUID(); let c = UUID(); let d = UUID()
         try store.append(StreamingMessage(id: a, kind: .user, content: "A", isStreamFinished: true), conversationId: cid)
         try store.append(StreamingMessage(id: b, kind: .user, content: "B", isStreamFinished: true), conversationId: cid)
         try store.append(StreamingMessage(id: c, kind: .user, content: "C", isStreamFinished: true), conversationId: cid)
         try store.delete(id: b, conversationId: cid)
         #expect(store.messages(for: cid).map(\.content) == ["A", "C"])
+        // Appending after a mid-list delete must NOT reuse a surviving order value
+        // (a fetchCount-based nextOrder would assign order 2, colliding with C).
+        try store.append(StreamingMessage(id: d, kind: .user, content: "D", isStreamFinished: true), conversationId: cid)
+        let after = store.messages(for: cid)
+        #expect(after.map(\.content) == ["A", "C", "D"])
     }
 
     @Test("deleteAll clears the conversation")
