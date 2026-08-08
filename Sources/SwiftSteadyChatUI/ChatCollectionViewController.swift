@@ -491,6 +491,30 @@ extension ChatCollectionViewController {
         }
         collectionView.scrollToItem(at: indexPath, at: position, animated: true)
     }
+
+    /// Removes a message atomically: the correct UI row (id-keyed — mid-list safe),
+    /// its cached controller, the controller's mirror, and the SwiftData record.
+    /// The consumer passes its store so the seam stays unchanged. The service
+    /// reconciles its OWN projection (a `delete(id:)` method); the consumer holds no
+    /// id. Fires NO `onMessagesChanged` — the row was already removed id-keyed here.
+    public func deleteMessage(id: UUID, conversationId: UUID, store: ChatMessageStore) {
+        guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
+        messages.remove(at: idx)
+        collectionView.performBatchUpdates {
+            collectionView.deleteItems(at: [IndexPath(item: idx, section: 0)])
+        } completion: { [weak self] _ in
+            self?.finishLayoutPass(preserveBottom: false)
+        }
+        evict(id)
+        updateStreamingState()   // the deleted message may have been the streaming one
+        // The record must go with the row — a silent save failure would resurrect the
+        // message on re-entry. Fail loud rather than leave the source holding it.
+        do {
+            try store.delete(id: id, conversationId: conversationId)
+        } catch {
+            assertionFailure("SwiftData delete failed for message \(id): \(error)")
+        }
+    }
 }
 
 private extension ChatCollectionViewController {
