@@ -28,7 +28,7 @@ public final class StubChatService: ChatService {
     """
 
     private let store: ChatMessageStore
-    private let conversationId: UUID
+    let conversationId: UUID
     private let responsePool: [String]
     private let charDelayMs: UInt64
 
