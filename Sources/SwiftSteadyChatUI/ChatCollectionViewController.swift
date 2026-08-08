@@ -465,6 +465,32 @@ extension ChatCollectionViewController {
     public func setSendEnabled(_ enabled: Bool?) {
         inputBar.setSendEnabled(enabled)
     }
+
+    // MARK: - Public jump + follow-break APIs
+
+    /// Public API: break the auto-scroll-to-bottom follow (a programmatic scroll away
+    /// from the stream — a jump, or the consumer's own "pause live"). The view stays
+    /// where it is; only an explicit re-engage (send a prompt, tap the FAB) resumes
+    /// following. Internally mapped to the gesture-break event (same effect).
+    public func breakAutoscroll() {
+        followState = FollowState.transition(current: followState, event: .gestureBegan)
+    }
+
+    /// Scrolls the chat so the message with `id` sits at the given anchor. No-op if
+    /// the id is not in the list. Breaks the follow first — a jump is a navigation
+    /// away from the bottom, so the next streamed reply must not yank the view back.
+    public func scrollToMessage(id: UUID, anchor: ScrollAnchor = .center) {
+        guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
+        breakAutoscroll()
+        let indexPath = IndexPath(item: idx, section: 0)
+        let position: UICollectionView.ScrollPosition
+        switch anchor {
+        case .top: position = .top
+        case .center: position = .centeredVertically
+        case .bottom: position = .bottom
+        }
+        collectionView.scrollToItem(at: indexPath, at: position, animated: true)
+    }
 }
 
 private extension ChatCollectionViewController {
