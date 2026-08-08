@@ -39,7 +39,7 @@ public final class ChatMessageStore {
 
     /// Finalize a message in place (content + finished state), or append if absent.
     public func replace(_ message: StreamingMessage, conversationId: UUID) throws {
-        let descriptor = FetchDescriptor<MessageRecord>(predicate: #Predicate { $0.id == message.id })
+        let descriptor = FetchDescriptor<MessageRecord>(predicate: #Predicate { $0.id == message.id && $0.conversationId == conversationId })
         if let record = try modelContext.fetch(descriptor).first {
             record.content = message.content
             record.thinking = message.thinking
@@ -52,7 +52,7 @@ public final class ChatMessageStore {
     }
 
     public func delete(id: UUID, conversationId: UUID) throws {
-        let descriptor = FetchDescriptor<MessageRecord>(predicate: #Predicate { $0.id == id })
+        let descriptor = FetchDescriptor<MessageRecord>(predicate: #Predicate { $0.id == id && $0.conversationId == conversationId })
         if let record = try modelContext.fetch(descriptor).first {
             modelContext.delete(record)
         }
