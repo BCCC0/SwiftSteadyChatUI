@@ -232,11 +232,54 @@ The `ChatService` seam, render path, and screen-chrome pattern are **unchanged**
 > construction, pins, previews); write both from the same code paths so they
 > cannot diverge.
 
-> **Deletion contract (id-keyed, deferred).** `ChatMessageStore` exposes
-> id-keyed deletion (`delete(id:conversationId:)` for a single message,
-> `deleteAll(for:)` for a conversation), but the full consumer-facing deletion
-> contract is not yet pinned down — treat the current delete methods as the
-> deferred, provisional shape.
+> **Deletion contract (id-keyed).** `ChatMessageStore` exposes id-keyed
+> deletion (`delete(id:conversationId:)` for a single message, `deleteAll(for:)`
+> for a conversation). The consumer-facing contract — the controller's
+> `deleteMessage(id:conversationId:store:)` — is documented under
+> "Per-message actions".
+
+## Per-message actions
+
+`ChatScreen.messageActions { controller, message in … }` hands every bubble a
+consumer-defined drop list, rendered as the bubble's context menu. The closure
+receives `(controller, message)`; each action's handler receives the message's
+`id`, so the consumer holds no ids. Actions are
+`ChatMessageAction(title:role:handler:)`, where `role` is `.normal` (default) or
+`.destructive` (renders red):
+
+```swift
+ChatScreen(service: service, config: config)
+    // `.messageActions` returns a `ChatScreen`, so it must be chained before
+    // View modifiers like `.ignoresSafeArea`.
+    .messageActions { controller, _ in
+        [
+            .init(title: "Delete", role: .destructive, handler: { id in
+                service.deleteLocal(id: id)                                     // service reconciles its own array
+                controller.deleteMessage(id: id, conversationId: conversationId, store: store)  // row + SwiftData record
+            }),
+            .init(title: "Jump", handler: { id in
+                controller.scrollToMessage(id: id, anchor: .center)             // breaks the follow internally
+            })
+        ]
+    }
+    .ignoresSafeArea(.keyboard, edges: .bottom)
+```
+
+The drop list is captured when each bubble's controller is created (its cached
+root view is frozen), so state-dependent actions apply only to newly-created
+bubbles — existing bubbles keep the list they were created with.
+
+- `controller.deleteMessage(id:conversationId:store:)` removes a message
+  atomically: the id-keyed row (mid-list safe), its cached controller, and the
+  SwiftData record. The service reconciles its OWN projection (a `delete(id:)`
+  method); the package fires no `onMessagesChanged`. A streaming message has no
+  record yet (`stored ⟹ finished`), so a mid-stream delete is UI-only — the
+  in-flight send task must not re-persist it.
+- `controller.breakAutoscroll()` stops the auto-scroll-to-bottom follow; the
+  view stays put until a send or a FAB tap re-engages.
+- `controller.scrollToMessage(id:anchor:)` scrolls a message to the `.top`,
+  `.center`, or `.bottom` of the viewport (`ScrollAnchor`), breaking the follow
+  first so the jump sticks.
 
 ## Public API
 
