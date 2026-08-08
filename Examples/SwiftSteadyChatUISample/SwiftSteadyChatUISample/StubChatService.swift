@@ -212,6 +212,8 @@ public final class StubChatService: ChatService {
             }
             thinkingSource.finish()
             // Deleted mid-stream (drop-list Delete)? Don't resurrect it in the store.
+            // Intentional side effect: this `return` also cancels the pending reply —
+            // deleting the in-flight thinking bubble aborts the whole response.
             guard messages.contains(where: { $0.id == thinkingID }) else { return }
             // Replace with the finished message — stored ⟹ finished; source kept alive.
             let finishedThinking = StreamingMessage(
