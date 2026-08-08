@@ -226,6 +226,12 @@ The `ChatService` seam, render path, and screen-chrome pattern are **unchanged**
 — the store never drives the live UI, which runs on the consumer's in-memory
 `messages` array.
 
+> **Authoritative-source rule.** The package store is the durable chat record
+> the UI reads on re-entry. If a consumer also persists messages in its own
+> domain store, that store stays authoritative for the domain (prompt
+> construction, pins, previews); write both from the same code paths so they
+> cannot diverge.
+
 > **Deletion contract (id-keyed, deferred).** `ChatMessageStore` exposes
 > id-keyed deletion (`delete(id:conversationId:)` for a single message,
 > `deleteAll(for:)` for a conversation), but the full consumer-facing deletion
