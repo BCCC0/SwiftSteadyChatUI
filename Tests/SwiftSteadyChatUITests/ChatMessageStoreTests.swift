@@ -59,6 +59,12 @@ struct ChatMessageStoreTests {
         try store.append(StreamingMessage(id: d, kind: .user, content: "D", isStreamFinished: true), conversationId: cid)
         let after = store.messages(for: cid)
         #expect(after.map(\.content) == ["A", "C", "D"])
+        // Directly assert the stored order values are collision-free: a fetchCount
+        // nextOrder would yield [0, 2, 2], which this fails deterministically.
+        let orderDescriptor = FetchDescriptor<MessageRecord>(
+            predicate: #Predicate { $0.conversationId == cid })
+        let orderedRecords = try store.modelContext.fetch(orderDescriptor)
+        #expect(orderedRecords.map(\.order) == [0, 2, 3])
     }
 
     @Test("deleteAll clears the conversation")
