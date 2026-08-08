@@ -193,6 +193,45 @@ app demonstrates this with a live status bar (`StatusBarView`).
 The defaults match the validated reference layout the UI tests were verified
 against — change them deliberately.
 
+## Single source of truth (SwiftData)
+
+The package ships `ChatMessageStore` — a SwiftData store that is the **durable
+source of truth for the chat record**. It persists two public `@Model` types:
+
+- `MessageRecord` — the message history (`conversationId`, `kind`, `content`,
+  `thinking`, `timestamp`, `isStreamFinished`, `order`). Only finished display
+  state is stored (`stored ⟹ finished`); `streamSource` is never a stored field.
+- `ConversationMeta` — one row per conversation holding an **opaque**
+  `systemPrompt`. The package never parses, orders, or interprets it; the
+  consumer constructs whatever string it wants and reads it back to compose the
+  LLM prompt.
+
+The consumer builds the `ModelContainer`, registering the package's public
+`@Model` types, hands it to `ChatMessageStore`, writes finished messages when
+streams end, and on re-entry loads `messages(for:)` + `systemPrompt(for:)`:
+
+```swift
+let container = try ModelContainer(for: MessageRecord.self, ConversationMeta.self)
+let store = ChatMessageStore(modelContainer: container)
+
+// Re-entry: restore the conversation.
+let history = store.messages(for: conversationId)
+let systemPrompt = store.systemPrompt(for: conversationId)
+
+// When a stream ends: persist the finished message.
+try store.replace(finishedMessage, conversationId: conversationId)
+```
+
+The `ChatService` seam, render path, and screen-chrome pattern are **unchanged**
+— the store never drives the live UI, which runs on the consumer's in-memory
+`messages` array.
+
+> **Deletion contract (id-keyed, deferred).** `ChatMessageStore` exposes
+> id-keyed deletion (`delete(id:conversationId:)` for a single message,
+> `deleteAll(for:)` for a conversation), but the full consumer-facing deletion
+> contract is not yet pinned down — treat the current delete methods as the
+> deferred, provisional shape.
+
 ## Public API
 
 - `ChatScreen` — SwiftUI wrapper (embed directly in a `View`).
