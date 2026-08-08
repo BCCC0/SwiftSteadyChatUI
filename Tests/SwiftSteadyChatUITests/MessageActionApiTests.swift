@@ -90,4 +90,25 @@ struct MessageActionApiTests {
         vc.deleteMessage(id: UUID(), conversationId: cid, store: store)   // no-op, no crash
         #expect(vc.messages.count == 1)
     }
+
+    @Test("messageActions closure is called with the controller and returns the consumer's actions")
+    func messageActionsWiring() {
+        let vc = ChatCollectionViewController(service: StubService(), config: .init())
+        vc.loadViewIfNeeded()
+        var receivedController: ChatCollectionViewController?
+        var receivedMessage: StreamingMessage?
+        let message = StreamingMessage(id: UUID(), kind: .reply, content: "hi", isStreamFinished: true)
+        vc.messageActions = { controller, msg in
+            receivedController = controller
+            receivedMessage = msg
+            return [ChatMessageAction(title: "Copy") { _ in }]
+        }
+
+        let actions = vc.makeRootViewActions(for: message)   // test-visible helper (Step 3)
+
+        #expect(receivedController === vc)
+        #expect(receivedMessage?.id == message.id)
+        #expect(actions.count == 1)
+        #expect(actions[0].title == "Copy")
+    }
 }

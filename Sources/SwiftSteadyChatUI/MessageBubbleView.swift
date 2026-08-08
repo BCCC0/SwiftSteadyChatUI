@@ -14,6 +14,8 @@ public struct MessageBubbleView: View {
     /// height (a thinking card expands/collapses), so the hosting controller can
     /// re-measure the cell. Nil for static bubbles.
     internal let onLayoutChange: (() -> Void)?
+    /// Consumer-defined drop list for this message (nil = no context menu).
+    internal let contextMenuActions: [ChatMessageAction]?
     /// Whether the thinking card is expanded. A thinking message renders its
     /// content collapsed by default; the toggle reveals it.
     @State private var thinkingExpanded = false
@@ -22,18 +24,20 @@ public struct MessageBubbleView: View {
         message: StreamingMessage,
         isInline: Bool = false,
         animateStreamingText: Bool = true,
-        onLayoutChange: (() -> Void)? = nil
+        onLayoutChange: (() -> Void)? = nil,
+        contextMenuActions: [ChatMessageAction]? = nil
     ) {
         self.message = message
         self.isInline = isInline
         self.animateStreamingText = animateStreamingText
         self.onLayoutChange = onLayoutChange
+        self.contextMenuActions = contextMenuActions
     }
 
     public var body: some View {
         HStack(alignment: .top, spacing: 6) {
             if message.isUser { Spacer(minLength: isInline ? 40 : 60) }
-            bubble
+            bubbleWithMenu
                 .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
             if !message.isUser { Spacer(minLength: isInline ? 40 : 60) }
         }
@@ -52,6 +56,24 @@ public struct MessageBubbleView: View {
         case .user: userBubble
         case .thinking: thinkingBubble
         case .reply: replyBubble
+        }
+    }
+
+    @ViewBuilder
+    private var bubbleWithMenu: some View {
+        if let actions = contextMenuActions {
+            bubble.contextMenu {
+                // Index-keyed: ChatMessageAction has no identity, so duplicate
+                // titles (e.g. two "Copy" variants) would collide under
+                // `id: \.title` — a runtime warning + undefined behavior.
+                ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
+                    Button(action.title, role: action.role == .destructive ? .destructive : nil) {
+                        action.handler(message.id)
+                    }
+                }
+            }
+        } else {
+            bubble
         }
     }
 

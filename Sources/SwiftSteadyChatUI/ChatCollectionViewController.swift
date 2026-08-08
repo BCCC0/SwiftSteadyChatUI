@@ -35,6 +35,9 @@ public final class ChatCollectionViewController: UIViewController {
     /// Test-visible message list (not API). The sync-diffing tests assert on it.
     internal var messages: [StreamingMessage] = []
     internal var config: ChatUIConfig
+    /// Consumer-defined per-message actions (the drop list). Called with the
+    /// controller + message; returns the actions the bubble's context menu shows.
+    internal var messageActions: ((ChatCollectionViewController, StreamingMessage) -> [ChatMessageAction])?
 
     /// Cached per-message hosting controllers — the heart of the pattern.
     /// Keyed by message UUID so the StreamedMarkdownView survives cell reuse.
@@ -432,11 +435,17 @@ extension ChatCollectionViewController: UICollectionViewDataSource, UICollection
             content: MessageBubbleView(
                 message: message,
                 animateStreamingText: config.streamingAnimateText,
-                onLayoutChange: { [weak self] in self?.onBubbleHeightChanged(for: message.id) }
+                onLayoutChange: { [weak self] in self?.onBubbleHeightChanged(for: message.id) },
+                contextMenuActions: makeRootViewActions(for: message)
             )
         ) { [weak self] h in
             self?.onStreamingHeightChange(h, for: message.id)
         }
+    }
+
+    /// Test-visible: compute a message's drop-list actions (not API).
+    internal func makeRootViewActions(for message: StreamingMessage) -> [ChatMessageAction] {
+        messageActions?(self, message) ?? []
     }
 
     func hostingController(for message: StreamingMessage) -> UIHostingController<RenderedHeightObserver<MessageBubbleView>> {
