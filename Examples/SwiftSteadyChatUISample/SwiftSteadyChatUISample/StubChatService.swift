@@ -139,6 +139,15 @@ public final class StubChatService: ChatService {
         return out
     }
 
+    /// Persist a store write, failing loud on error. The store is the durable
+    /// source of truth (the README's authoritative-source rule), so a silently
+    /// swallowed write would let the record diverge from the in-memory array —
+    /// the exact data loss the rule prevents. Mirrors `deleteMessage`'s loud
+    /// failure in the package.
+    private func persist(_ operation: () throws -> Void) {
+        do { try operation() } catch { assertionFailure("SwiftData write failed: \(error)") }
+    }
+
     /// Pre-fill messages for testing (avoids slow UI-based seeding). Seeds
     /// persist to the store too, so a re-entry restores the seeded history.
     public func seedMessages(count: Int) {
@@ -152,8 +161,8 @@ public final class StubChatService: ChatService {
             )
             messages.append(userMessage)
             messages.append(replyMessage)
-            try? store.append(userMessage, conversationId: conversationId)
-            try? store.append(replyMessage, conversationId: conversationId)
+            persist { try store.append(userMessage, conversationId: conversationId) }
+            persist { try store.append(replyMessage, conversationId: conversationId) }
         }
         onMessagesChanged?()
     }
@@ -173,7 +182,7 @@ public final class StubChatService: ChatService {
         ]
         for message in seeded {
             messages.append(message)
-            try? store.append(message, conversationId: conversationId)
+            persist { try store.append(message, conversationId: conversationId) }
         }
         onMessagesChanged?()
     }
@@ -189,7 +198,7 @@ public final class StubChatService: ChatService {
             id: UUID(), kind: .user, content: text, isStreamFinished: true
         )
         messages.append(userMessage)
-        try? store.append(userMessage, conversationId: conversationId)
+        persist { try store.append(userMessage, conversationId: conversationId) }
         onMessagesChanged?()
         try? await Task.sleep(for: .milliseconds(50))
 
@@ -222,7 +231,7 @@ public final class StubChatService: ChatService {
             if let idx = messages.firstIndex(where: { $0.id == thinkingID }) {
                 messages[idx] = finishedThinking
             }
-            try? store.replace(finishedThinking, conversationId: conversationId)
+            persist { try store.replace(finishedThinking, conversationId: conversationId) }
             onMessagesChanged?()
         }
 
@@ -250,7 +259,7 @@ public final class StubChatService: ChatService {
         if let idx = messages.firstIndex(where: { $0.id == replyID }) {
             messages[idx] = finishedReply
         }
-        try? store.replace(finishedReply, conversationId: conversationId)
+        persist { try store.replace(finishedReply, conversationId: conversationId) }
         onMessagesChanged?()
     }
 
@@ -261,7 +270,7 @@ public final class StubChatService: ChatService {
     public func clearChat() {
         guard !isStreaming else { return }
         messages = []
-        try? store.deleteAll(for: conversationId)
+        persist { try store.deleteAll(for: conversationId) }
         onMessagesChanged?()
     }
 

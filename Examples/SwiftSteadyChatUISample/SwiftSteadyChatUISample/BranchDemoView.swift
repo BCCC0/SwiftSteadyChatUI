@@ -50,12 +50,16 @@ struct BranchDemoView: View {
                                 // The hook delivers (controller, id) — the consumer holds no id, tracks
                                 // nothing. The service reconciles its OWN projection (deleteLocal); the
                                 // package removes the row + the record.
-                                .init(title: "Delete", role: .destructive, handler: { id in
+                                // [weak controller]: the handlers are stored in the
+                                // bubble's frozen root view (retained by the controller's
+                                // cache), so a strong capture would retain the controller
+                                // through teardown — a leak on every branch switch.
+                                .init(title: "Delete", role: .destructive, handler: { [weak controller] id in
                                     service.deleteLocal(id: id)                                            // service reconciles its array
-                                    controller.deleteMessage(id: id, conversationId: service.conversationId, store: store)  // row + record
+                                    controller?.deleteMessage(id: id, conversationId: service.conversationId, store: store)  // row + record
                                 }),
-                                .init(title: "Jump", handler: { id in
-                                    controller.scrollToMessage(id: id, anchor: .center)   // breaks the follow internally
+                                .init(title: "Jump", handler: { [weak controller] id in
+                                    controller?.scrollToMessage(id: id, anchor: .center)   // breaks the follow internally
                                 })
                             ]
                         }
@@ -75,8 +79,8 @@ struct BranchDemoView: View {
             // records so a fresh seed + send is deterministic and the on-disk store
             // never accumulates across runs (used by the relaunch UI test).
             if ProcessInfo.processInfo.arguments.contains("--reset-branch") {
-                try? store.deleteAll(for: DemoConversation.alice.conversationId)
-                try? store.deleteAll(for: DemoConversation.bob.conversationId)
+                persist { try store.deleteAll(for: DemoConversation.alice.conversationId) }
+                persist { try store.deleteAll(for: DemoConversation.bob.conversationId) }
             }
             // Seed TWO DISTINCT histories into the shared store (once per launch;
             // --in-memory makes each launch fresh). Distinct content lets the UI
@@ -93,15 +97,21 @@ struct BranchDemoView: View {
         }
     }
 
+    /// Persist a store write, failing loud on error (the store is the durable
+    /// source of truth; a silently swallowed write would lose the record).
+    private func persist(_ operation: () throws -> Void) {
+        do { try operation() } catch { assertionFailure("SwiftData write failed: \(error)") }
+    }
+
     private func seedIfNeeded(_ conversation: DemoConversation, marker: String, count: Int) {
         guard store.messages(for: conversation.conversationId).isEmpty else { return }
         for i in 0..<count {
-            try? store.append(
+            persist { try store.append(
                 StreamingMessage(id: UUID(), kind: .user, content: "\(marker) message \(i + 1)", isStreamFinished: true),
-                conversationId: conversation.conversationId)
-            try? store.append(
+                conversationId: conversation.conversationId) }
+            persist { try store.append(
                 StreamingMessage(id: UUID(), kind: .reply, content: "\(marker) reply \(i + 1)", isStreamFinished: true),
-                conversationId: conversation.conversationId)
+                conversationId: conversation.conversationId) }
         }
     }
 }

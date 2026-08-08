@@ -253,12 +253,12 @@ ChatScreen(service: service, config: config)
     // View modifiers like `.ignoresSafeArea`.
     .messageActions { controller, _ in
         [
-            .init(title: "Delete", role: .destructive, handler: { id in
+            .init(title: "Delete", role: .destructive, handler: { [weak controller] id in
                 service.deleteLocal(id: id)                                     // service reconciles its own array
-                controller.deleteMessage(id: id, conversationId: conversationId, store: store)  // row + SwiftData record
+                controller?.deleteMessage(id: id, conversationId: conversationId, store: store)  // row + SwiftData record
             }),
-            .init(title: "Jump", handler: { id in
-                controller.scrollToMessage(id: id, anchor: .center)             // breaks the follow internally
+            .init(title: "Jump", handler: { [weak controller] id in
+                controller?.scrollToMessage(id: id, anchor: .center)             // breaks the follow internally
             })
         ]
     }
@@ -267,7 +267,10 @@ ChatScreen(service: service, config: config)
 
 The drop list is captured when each bubble's controller is created (its cached
 root view is frozen), so state-dependent actions apply only to newly-created
-bubbles — existing bubbles keep the list they were created with.
+bubbles — existing bubbles keep the list they were created with. Because that
+frozen root view is retained by the controller's cache, action handlers must
+not strongly capture the controller — use `[weak controller]` in the handler
+(as above) or the controller is retained through teardown.
 
 - `controller.deleteMessage(id:conversationId:store:)` removes a message
   atomically: the id-keyed row (mid-list safe), its cached controller, and the
