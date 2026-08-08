@@ -53,4 +53,27 @@ struct StreamingMessageTests {
         let c = StreamingMessage(id: id, kind: .reply, content: "x", isStreamFinished: true)
         #expect(a != c)   // finished state differs
     }
+
+    @Test("thinking and timestamp round-trip through Codable")
+    func thinkingTimestampCodable() throws {
+        let stamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let m = StreamingMessage(id: UUID(), kind: .reply, content: "answer",
+                                 thinking: "hmm", timestamp: stamp, isStreamFinished: true)
+        let data = try JSONEncoder().encode(m)
+        let decoded = try JSONDecoder().decode(StreamingMessage.self, from: data)
+        #expect(decoded == m)
+        #expect(decoded.thinking == "hmm")
+        #expect(decoded.timestamp == stamp)
+    }
+
+    @Test("equality respects thinking and timestamp")
+    func equalityRespectsThinkingTimestamp() {
+        let id = UUID()   // shared id — so the assertions test thinking/timestamp, not id
+        let base = StreamingMessage(id: id, kind: .reply, content: "x", isStreamFinished: true)
+        let withThinking = StreamingMessage(id: id, kind: .reply, content: "x", thinking: "t", isStreamFinished: true)
+        let withStamp = StreamingMessage(id: id, kind: .reply, content: "x",
+                                         timestamp: Date(timeIntervalSince1970: 0), isStreamFinished: true)
+        #expect(base != withThinking)
+        #expect(base != withStamp)
+    }
 }
