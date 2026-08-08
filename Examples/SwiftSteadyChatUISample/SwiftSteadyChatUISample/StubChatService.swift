@@ -211,6 +211,8 @@ public final class StubChatService: ChatService {
                 try? await Task.sleep(for: .milliseconds(charDelayMs))
             }
             thinkingSource.finish()
+            // Deleted mid-stream (drop-list Delete)? Don't resurrect it in the store.
+            guard messages.contains(where: { $0.id == thinkingID }) else { return }
             // Replace with the finished message — stored ⟹ finished; source kept alive.
             let finishedThinking = StreamingMessage(
                 id: thinkingID, kind: .thinking, content: acc, streamSource: thinkingSource, isStreamFinished: true
@@ -237,6 +239,8 @@ public final class StubChatService: ChatService {
             try? await Task.sleep(for: .milliseconds(charDelayMs))
         }
         replySource.finish()
+        // Deleted mid-stream (drop-list Delete)? Don't resurrect it in the store.
+        guard messages.contains(where: { $0.id == replyID }) else { return }
         // Replace with the finished message — stored ⟹ finished; source kept alive.
         let finishedReply = StreamingMessage(
             id: replyID, kind: .reply, content: acc, streamSource: replySource, isStreamFinished: true
@@ -257,6 +261,14 @@ public final class StubChatService: ChatService {
         messages = []
         try? store.deleteAll(for: conversationId)
         onMessagesChanged?()
+    }
+
+    /// The service reconciles its OWN projection on a drop-list Delete. The
+    /// package's `deleteMessage` handles the row + the store record; this keeps
+    /// the service's array consistent (else the next append re-inserts the
+    /// deleted id via the count-delta sync).
+    func deleteLocal(id: UUID) {
+        messages.removeAll { $0.id == id }
     }
 
     /// Build the service from process launch arguments.

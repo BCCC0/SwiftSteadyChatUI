@@ -43,6 +43,22 @@ struct BranchDemoView: View {
                 VStack(spacing: 0) {
                     StatusBarView(service: service)
                     ChatScreen(service: service, config: config)
+                        // `.messageActions` is a ChatScreen method (returns a ChatScreen),
+                        // so it must be applied before `.ignoresSafeArea` (a View modifier).
+                        .messageActions { controller, _ in
+                            [
+                                // The hook delivers (controller, id) — the consumer holds no id, tracks
+                                // nothing. The service reconciles its OWN projection (deleteLocal); the
+                                // package removes the row + the record.
+                                .init(title: "Delete", role: .destructive, handler: { id in
+                                    service.deleteLocal(id: id)                                            // service reconciles its array
+                                    controller.deleteMessage(id: id, conversationId: service.conversationId, store: store)  // row + record
+                                }),
+                                .init(title: "Jump", handler: { id in
+                                    controller.scrollToMessage(id: id, anchor: .center)   // breaks the follow internally
+                                })
+                            ]
+                        }
                         .ignoresSafeArea(.keyboard, edges: .bottom)
                 }
                 // Key on the SERVICE's conversationId, not `selected`: the subtree

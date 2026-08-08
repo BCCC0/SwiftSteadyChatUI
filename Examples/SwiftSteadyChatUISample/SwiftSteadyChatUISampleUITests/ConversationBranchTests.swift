@@ -132,4 +132,42 @@ final class ConversationBranchTests: ChatUITestBase {
         XCTAssertTrue(app.staticTexts[marker].waitForNonExistence(timeout: 30),
             "In-memory store should NOT persist across a relaunch — the marker should be gone")
     }
+
+    /// The drop list wires delete: long-press a message → Delete → the message
+    /// disappears from the UI AND the SwiftData store (re-entry doesn't restore it).
+    func testDropListDeleteRemovesFromUIAndStore() throws {
+        // Bob seeded with "Bob message 1..5" / "Bob reply 1..5". Open Bob and
+        // target the LAST seeded pair — "Bob message 5"/"Bob reply 5" are
+        // bottom-adjacent and ON-SCREEN after the initial scroll-to-bottom
+        // ("Bob message 1" is scrolled off-screen and can't be long-pressed).
+        app.segmentedControls.firstMatch.buttons["Bob"].tap()
+        // Message bubbles expose their text at different element types (a user
+        // prompt is a staticText; a markdown reply is not), so match on ANY
+        // element whose label contains the seeded text.
+        let bobMsg5 = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Bob message 5")).firstMatch
+        XCTAssertTrue(bobMsg5.waitForExistence(timeout: 30), "Bob's history not shown")
+
+        // Long-press a bottom-adjacent seeded message → the consumer's drop list appears.
+        bobMsg5.press(forDuration: 1.2)
+        let deleteButton = app.buttons["Delete"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 10), "Delete action did not appear in the drop list")
+        deleteButton.tap()
+
+        // The deleted message is gone from the UI.
+        XCTAssertTrue(bobMsg5.waitForNonExistence(timeout: 10), "Deleted message still visible")
+
+        // And it's gone from the STORE: switch away + back → not restored. The
+        // POSITIVE CONTROL — surviving neighbor "Bob reply 5" IS present after
+        // re-entry — makes the deleted message's absence meaningful (the whole
+        // Bob history fits the viewport, so a surviving record would be on screen,
+        // not an off-screen false negative).
+        let bobReply5 = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Bob reply 5")).firstMatch
+        app.segmentedControls.firstMatch.buttons["Alice"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Alice message 1")).firstMatch.waitForExistence(timeout: 30))
+        app.segmentedControls.firstMatch.buttons["Bob"].tap()
+        XCTAssertTrue(bobReply5.waitForExistence(timeout: 30),
+            "Surviving neighbor lost — the restuffed history is missing a message that was NOT deleted (harness broken)")
+        XCTAssertTrue(bobMsg5.waitForNonExistence(timeout: 30),
+            "Deleted message was restored from the store — the record was not deleted")
+    }
 }
