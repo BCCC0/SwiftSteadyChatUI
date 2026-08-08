@@ -75,29 +75,45 @@ final class MyChatService: ChatService {
     private let model: MyLLMModel   // streamThinking/streamReply yield text chunks
 
     func sendMessage(_ text: String) async {
-        // 1. Instant user prompt (a single .user block — always finished).
-        messages.append(StreamingMessage(blocks: [
-            .init(kind: .user, content: text, isStreamFinished: true)
-        ]))
+        // 1. Instant user prompt (a single .user message — always finished).
+        messages.append(StreamingMessage(
+            id: UUID(), kind: .user, content: text, isStreamFinished: true
+        ))
         onMessagesChanged?()
 
-        // 2. Reply: thinking + reply blocks, each with its own stream.
+        // 2. Thinking + reply are TWO messages, streamed one at a time (at most
+        // one message streams, and it is always the last). Each owns its source.
+        let thinkingID = UUID()
         let thinkingSource = ChatStreamSource()
-        let replySource = ChatStreamSource()
-        let id = UUID()
-        messages.append(StreamingMessage(id: id, blocks: [
-            .init(kind: .thinking, content: "", streamSource: thinkingSource),
-            .init(kind: .reply, content: "", streamSource: replySource),
-        ]))
+        messages.append(StreamingMessage(
+            id: thinkingID, kind: .thinking, content: "",
+            streamSource: thinkingSource, isStreamFinished: false
+        ))
         onMessagesChanged?()
 
-        // 3. Stream thinking, then the reply (full snapshots each yield).
         var thinking = ""
         for chunk in try await model.streamThinking(to: text) {
             thinking += chunk
             thinkingSource.yield(thinking)
         }
         thinkingSource.finish()
+        // Replace with the FINISHED message (stored ⟹ finished; the source is
+        // kept alive so a kept cached bubble renders the final text statically).
+        if let idx = messages.firstIndex(where: { $0.id == thinkingID }) {
+            messages[idx] = StreamingMessage(
+                id: thinkingID, kind: .thinking, content: thinking,
+                streamSource: thinkingSource, isStreamFinished: true
+            )
+        }
+        onMessagesChanged?()
+
+        let replyID = UUID()
+        let replySource = ChatStreamSource()
+        messages.append(StreamingMessage(
+            id: replyID, kind: .reply, content: "",
+            streamSource: replySource, isStreamFinished: false
+        ))
+        onMessagesChanged?()
 
         var reply = ""
         for chunk in try await model.streamReply(to: text) {
@@ -105,14 +121,12 @@ final class MyChatService: ChatService {
             replySource.yield(reply)
         }
         replySource.finish()
-
-        // 4. Replace with FINISHED blocks (stored ⟹ finished; sources kept
-        // alive so a kept cached bubble renders the final text statically).
-        guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
-        messages[idx] = StreamingMessage(id: id, blocks: [
-            .init(kind: .thinking, content: thinking, streamSource: thinkingSource, isStreamFinished: true),
-            .init(kind: .reply, content: reply, streamSource: replySource, isStreamFinished: true),
-        ])
+        if let idx = messages.firstIndex(where: { $0.id == replyID }) {
+            messages[idx] = StreamingMessage(
+                id: replyID, kind: .reply, content: reply,
+                streamSource: replySource, isStreamFinished: true
+            )
+        }
         onMessagesChanged?()
     }
 }
@@ -129,16 +143,19 @@ struct ChatView: View {
 ```
 
 > **`ChatService` contract:**
-> 1. `messages` must stay *static mid-stream*. Text flows through each block's
->    `ChatStreamSource` (see `MessageBlock.streamSource`), and the array is only
->    ever *replaced* — never mutated in place — while a message is streaming.
->    This is what lets the collection view avoid reloading.
-> 2. A message's blocks (`kind`/`content`/finish) are **final at first render** —
->    the cached bubble captures the struct by value. All evolving text goes
->    through each block's `streamSource`; when a stream ends, **replace** the
->    message with finished copies (keeping `streamSource` alive, as in the
->    example above). Only finished blocks should be persisted (`stored ⟹
->    finished`); `streamSource` is never encoded.
+> 1. `messages` must stay *static mid-stream*. Text flows through each message's
+>    `ChatStreamSource`, and the array is only ever *replaced* — never mutated in
+>    place — while a message is streaming. This is what lets the collection view
+>    avoid reloading.
+> 2. A message's `kind`/`content`/finish are **final at first render** — the
+>    cached bubble captures the struct by value. All evolving text goes through
+>    its `streamSource`; when a stream ends, **replace** the message with a
+>    finished copy (keeping `streamSource` alive, as in the example above). Only
+>    finished messages should be persisted (`stored ⟹ finished`); `streamSource`
+>    is never encoded.
+> 3. **At most one message streams at a time, always the last.** A thinking reply
+>    is TWO messages — append `.thinking`, stream it, then append `.reply` and
+>    stream it.
 
 ### Configuration
 
@@ -159,10 +176,10 @@ against — change them deliberately.
 - `ChatScreen` — SwiftUI wrapper (embed directly in a `View`).
 - `ChatCollectionViewController` — the underlying `UICollectionViewController`.
 - `ChatService` — the protocol to conform to.
-- `StreamingMessage` — the display model (`id`, `blocks`, derived `role`).
-  `MessageBlock` (`kind`: `.thinking`/`.reply`/`.user`, `content`,
-  `streamSource`, `isStreamFinished`) is the unit of streaming; `BlockKind`
-  distinguishes the instant user prompt from the reply class.
+- `StreamingMessage` — the display model (one bubble per message: `id`, `kind`,
+  `content`, `streamSource`, `isStreamFinished`; derived `role`/`isStreaming`).
+  `MessageKind` (`.user`/`.thinking`/`.reply`) decides the bubble; a thinking
+  reply is two messages appended and streamed in sequence.
 - `ChatStreamSource` — bridges an `AsyncStream<String>` to
   `StreamedMarkdownSource`.
 - `ChatUIConfig` — behavior/appearance configuration.
@@ -175,8 +192,8 @@ The sample app in `Examples/SwiftSteadyChatUISample/` is **built entirely from
 the public API** — it imports only `SwiftSteadyChatUI` and exercises the same
 `ChatService` seam, `ChatScreen` embedding, and `ChatUIConfig` you would use in
 your own app. It doubles as the host for the UI-test suite
-(13 UI tests covering keyboard push-up, streaming flicker, and streamed
-thinking). Regenerate it
+(covering keyboard push-up, streaming flicker, and streamed thinking).
+Regenerate it
 with `make generate-sample-project`.
 
 ## Development
@@ -184,7 +201,7 @@ with `make generate-sample-project`.
 ```sh
 make help                  # Show all targets
 make lint                  # SwiftLint (strict)
-make test                  # Package unit tests (49 Swift Testing tests)
+make test                  # Package unit tests
 make build-sample          # Generate + build the sample app
 make ci                    # lint + test + build-sample (same as CI)
 ```
