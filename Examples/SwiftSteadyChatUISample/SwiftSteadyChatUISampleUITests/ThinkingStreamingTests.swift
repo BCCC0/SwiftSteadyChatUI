@@ -5,7 +5,7 @@ import XCTest
 final class ThinkingStreamingTests: ChatUITestBase {
     override func setUpWithError() throws {
         continueAfterFailure = false
-        app.launchArguments = ["--thinking-reply", "--no-text-animation"]
+        app.launchArguments = ["--thinking-reply", "--no-text-animation", "--in-memory"]
         app.launch()
     }
 
@@ -63,7 +63,7 @@ final class ThinkingStreamingTests: ChatUITestBase {
     /// toggle — the geometry is measured on the message above the last.
     func testThinkingToggleStatus() throws {
         app.terminate()
-        app.launchArguments = ["--seed-thinking", "--no-text-animation"]
+        app.launchArguments = ["--seed-thinking", "--no-text-animation", "--in-memory"]
         app.launch()
 
         // Wait for the seeded conversation to appear, then give the initial

@@ -9,7 +9,7 @@ final class KeyboardPushTests: ChatUITestBase {
         // seeded conversation; the demo auto-send stream would race every
         // measurement (see docs/superpowers/reports/2026-08-05-ui-test-failures.md).
         // --no-text-animation: the suite exercises the stable (non-animated) render.
-        app.launchArguments = ["--seed-messages", "8", "--no-auto-send", "--no-text-animation"]
+        app.launchArguments = ["--seed-messages", "8", "--no-auto-send", "--no-text-animation", "--in-memory"]
         app.launch()
     }
 
@@ -229,7 +229,7 @@ final class KeyboardPushTests: ChatUITestBase {
         // --no-auto-send: a fresh conversation with no demo stream injected, so
         // each prompt's reply is the only live message measured.
         // --no-text-animation: the suite exercises the stable (non-animated) render.
-        app.launchArguments = ["--no-auto-send", "--no-text-animation"]
+        app.launchArguments = ["--no-auto-send", "--no-text-animation", "--in-memory"]
         app.launch()
 
         let tv = app.textViews["input-textview"]
@@ -298,7 +298,7 @@ final class KeyboardPushTests: ChatUITestBase {
     func testPushUpNotDoubledForShortContent() throws {
         func gapToInputBar(seed: Int) -> CGFloat? {
             app.terminate()
-            app.launchArguments = ["--seed-messages", "\(seed)", "--no-auto-send", "--no-text-animation"]
+            app.launchArguments = ["--seed-messages", "\(seed)", "--no-auto-send", "--no-text-animation", "--in-memory"]
             app.launch()
             let tv = app.textViews["input-textview"]
             guard tv.waitForExistence(timeout: 10) else { return nil }

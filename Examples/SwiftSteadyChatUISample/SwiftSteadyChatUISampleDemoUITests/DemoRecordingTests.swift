@@ -12,7 +12,7 @@ final class DemoRecordingTests: DemoUITestBase {
     // MARK: Demo 1 — empty conversation → prompt → long streaming reply
 
     func testDemo1StreamingLongReply() throws {
-        app.launchArguments = ["--long-reply"]   // no seed → truly empty conversation
+        app.launchArguments = ["--long-reply", "--in-memory"]   // no seed → truly empty conversation
         app.launch()
 
         let tv = app.textViews["input-textview"]
@@ -36,7 +36,7 @@ final class DemoRecordingTests: DemoUITestBase {
     func testDemo2KeyboardPushUpAndDismiss() throws {
         // --no-auto-send: keyboard demos must show a STATIC conversation, not a
         // demo auto-send stream racing the push-up (same fix as the UI suite).
-        app.launchArguments = ["--seed-messages", "8", "--no-auto-send"]
+        app.launchArguments = ["--seed-messages", "8", "--no-auto-send", "--in-memory"]
         app.launch()
 
         let tv = app.textViews["input-textview"]
@@ -63,7 +63,7 @@ final class DemoRecordingTests: DemoUITestBase {
     func testDemo3ScrolledKeyboardNoPushUp() throws {
         // --no-auto-send: keyboard demos must show a STATIC conversation, not a
         // demo auto-send stream racing the push-up (same fix as the UI suite).
-        app.launchArguments = ["--seed-messages", "8", "--no-auto-send"]
+        app.launchArguments = ["--seed-messages", "8", "--no-auto-send", "--in-memory"]
         app.launch()
 
         let tv = app.textViews["input-textview"]

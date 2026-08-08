@@ -27,12 +27,25 @@ public final class StubChatService: ChatService {
     weigh the constraints, and only then produce the final reply.
     """
 
+    private let store: ChatMessageStore
+    private let conversationId: UUID
     private let responsePool: [String]
     private let charDelayMs: UInt64
 
-    public init(responsePool: [String]? = nil, charDelayMs: UInt64 = 20) {
+    public init(
+        store: ChatMessageStore,
+        conversationId: UUID,
+        responsePool: [String]? = nil,
+        charDelayMs: UInt64 = 20
+    ) {
+        self.store = store
+        self.conversationId = conversationId
         self.responsePool = responsePool ?? StubChatService.defaultPool
         self.charDelayMs = charDelayMs
+        // Hydrate on re-entry: restore the persisted history for this
+        // conversation (the store is the durable source of truth; sources nil
+        // → static render).
+        messages = store.messages(for: conversationId)
     }
 
     /// Deterministic long markdown reply for streaming tests (`--long-reply`).
@@ -126,16 +139,21 @@ public final class StubChatService: ChatService {
         return out
     }
 
-    /// Pre-fill messages for testing (avoids slow UI-based seeding).
+    /// Pre-fill messages for testing (avoids slow UI-based seeding). Seeds
+    /// persist to the store too, so a re-entry restores the seeded history.
     public func seedMessages(count: Int) {
         for i in 0..<count {
             let text = responsePool[i % responsePool.count]
-            messages.append(StreamingMessage(
+            let userMessage = StreamingMessage(
                 id: UUID(), kind: .user, content: "Test message \(i + 1)", isStreamFinished: true
-            ))
-            messages.append(StreamingMessage(
+            )
+            let replyMessage = StreamingMessage(
                 id: UUID(), kind: .reply, content: text, isStreamFinished: true
-            ))
+            )
+            messages.append(userMessage)
+            messages.append(replyMessage)
+            try? store.append(userMessage, conversationId: conversationId)
+            try? store.append(replyMessage, conversationId: conversationId)
         }
         onMessagesChanged?()
     }
@@ -147,18 +165,16 @@ public final class StubChatService: ChatService {
     /// test toggles the thinking bubble and checks its expand/collapse status
     /// against the message above it (deterministic — nothing streams underneath).
     public func seedThinkingConversation() {
-        messages.append(StreamingMessage(
-            id: UUID(), kind: .reply, content: "Seeded normal reply", isStreamFinished: true
-        ))
-        messages.append(StreamingMessage(
-            id: UUID(), kind: .user, content: "Seed prompt", isStreamFinished: true
-        ))
-        messages.append(StreamingMessage(
-            id: UUID(), kind: .thinking, content: StubChatService.thinkingText, isStreamFinished: true
-        ))
-        messages.append(StreamingMessage(
-            id: UUID(), kind: .reply, content: StubChatService.longStreamingReply, isStreamFinished: true
-        ))
+        let seeded: [StreamingMessage] = [
+            StreamingMessage(id: UUID(), kind: .reply, content: "Seeded normal reply", isStreamFinished: true),
+            StreamingMessage(id: UUID(), kind: .user, content: "Seed prompt", isStreamFinished: true),
+            StreamingMessage(id: UUID(), kind: .thinking, content: StubChatService.thinkingText, isStreamFinished: true),
+            StreamingMessage(id: UUID(), kind: .reply, content: StubChatService.longStreamingReply, isStreamFinished: true)
+        ]
+        for message in seeded {
+            messages.append(message)
+            try? store.append(message, conversationId: conversationId)
+        }
         onMessagesChanged?()
     }
 
@@ -169,9 +185,11 @@ public final class StubChatService: ChatService {
         }
 
         // 1. Instant user prompt (right-aligned blue).
-        messages.append(StreamingMessage(
+        let userMessage = StreamingMessage(
             id: UUID(), kind: .user, content: text, isStreamFinished: true
-        ))
+        )
+        messages.append(userMessage)
+        try? store.append(userMessage, conversationId: conversationId)
         onMessagesChanged?()
         try? await Task.sleep(for: .milliseconds(50))
 
@@ -194,11 +212,13 @@ public final class StubChatService: ChatService {
             }
             thinkingSource.finish()
             // Replace with the finished message — stored ⟹ finished; source kept alive.
+            let finishedThinking = StreamingMessage(
+                id: thinkingID, kind: .thinking, content: acc, streamSource: thinkingSource, isStreamFinished: true
+            )
             if let idx = messages.firstIndex(where: { $0.id == thinkingID }) {
-                messages[idx] = StreamingMessage(
-                    id: thinkingID, kind: .thinking, content: acc, streamSource: thinkingSource, isStreamFinished: true
-                )
+                messages[idx] = finishedThinking
             }
+            try? store.replace(finishedThinking, conversationId: conversationId)
             onMessagesChanged?()
         }
 
@@ -218,11 +238,13 @@ public final class StubChatService: ChatService {
         }
         replySource.finish()
         // Replace with the finished message — stored ⟹ finished; source kept alive.
+        let finishedReply = StreamingMessage(
+            id: replyID, kind: .reply, content: acc, streamSource: replySource, isStreamFinished: true
+        )
         if let idx = messages.firstIndex(where: { $0.id == replyID }) {
-            messages[idx] = StreamingMessage(
-                id: replyID, kind: .reply, content: acc, streamSource: replySource, isStreamFinished: true
-            )
+            messages[idx] = finishedReply
         }
+        try? store.replace(finishedReply, conversationId: conversationId)
         onMessagesChanged?()
     }
 
@@ -233,6 +255,7 @@ public final class StubChatService: ChatService {
     public func clearChat() {
         guard !isStreaming else { return }
         messages = []
+        try? store.deleteAll(for: conversationId)
         onMessagesChanged?()
     }
 
@@ -240,42 +263,42 @@ public final class StubChatService: ChatService {
     /// - `--long-reply` → deterministic long markdown reply (streaming tests).
     ///   Composes with `--seed-messages` (seeded pairs use the long reply too).
     /// - `--seed-messages N` → pre-fill N user/assistant pairs for UI tests.
-    static func createWithArgs() -> StubChatService {
+    static func createWithArgs(store: ChatMessageStore, conversationId: UUID) -> StubChatService {
         let args = ProcessInfo.processInfo.arguments
         let service: StubChatService
         if args.contains("--seed-thinking") {
-            service = StubChatService()
+            service = StubChatService(store: store, conversationId: conversationId)
             service.seedThinkingConversation()
         } else if args.contains("--auto-thinking") {
             // Slower char delay (40ms) so the thinking stream is easy to watch
             // and toggle by hand. Auto-sends on launch (see the sample App).
-            service = StubChatService(responsePool: [StubChatService.longStreamingReply], charDelayMs: 40)
+            service = StubChatService(store: store, conversationId: conversationId, responsePool: [StubChatService.longStreamingReply], charDelayMs: 40)
             service.streamsThinking = true
             service.autoSendText = "Show me how you think."
         } else if args.contains("--rich-reply") {
             // Syntax-dense markdown at a watchable pace (~35ms/char ≈ 18s):
             // headings, table, nested lists, blockquote, code blocks. Auto-sends
             // so the stream starts without typing.
-            service = StubChatService(responsePool: [StubChatService.richStreamingReply], charDelayMs: 35)
+            service = StubChatService(store: store, conversationId: conversationId, responsePool: [StubChatService.richStreamingReply], charDelayMs: 35)
             service.autoSendText = "Render complex markdown"
         } else if args.contains("--thinking-reply") {
-            service = StubChatService(responsePool: [StubChatService.longStreamingReply])
+            service = StubChatService(store: store, conversationId: conversationId, responsePool: [StubChatService.longStreamingReply])
             service.streamsThinking = true
         } else if args.contains("--longest-reply") {
             // ~48k chars at 1ms/char ≈ 48s. At that pace the markdown re-parse
             // (which grows with document size) outruns the 1ms yield — so the
             // bubble visibly falls behind the stream, demonstrating the
             // full-re-parse cost scaling. Use this for the stress demo.
-            service = StubChatService(responsePool: [StubChatService.longestStreamingReply], charDelayMs: 1)
+            service = StubChatService(store: store, conversationId: conversationId, responsePool: [StubChatService.longestStreamingReply], charDelayMs: 1)
         } else if args.contains("--long-reply") {
-            service = StubChatService(responsePool: [StubChatService.longStreamingReply])
+            service = StubChatService(store: store, conversationId: conversationId, responsePool: [StubChatService.longStreamingReply])
         } else {
             // Default launch (no args): demonstrate the thinking block.
             // `streamsThinking` makes every reply stream a thinking block first,
             // and `autoSendText` auto-sends a prompt shortly after launch (see
             // the sample App) so the streamed thinking + toggle is visible
             // immediately — no launch args needed.
-            service = StubChatService()
+            service = StubChatService(store: store, conversationId: conversationId)
             service.streamsThinking = true
             service.autoSendText = "Show me how you think."
         }

@@ -14,7 +14,7 @@ final class BannerInteractionTests: ChatUITestBase {
         // --no-auto-send: keep the conversation static so the banner's state
         // transitions are deterministic (no demo stream racing the assertions).
         // --no-text-animation: the suite exercises the stable render.
-        app.launchArguments = ["--no-auto-send", "--no-text-animation"]
+        app.launchArguments = ["--no-auto-send", "--no-text-animation", "--in-memory"]
         app.launch()
     }
 
@@ -60,7 +60,7 @@ final class BannerInteractionTests: ChatUITestBase {
     /// assertion fails on the reporting artifact, not the layout.
     func testBannerDoesNotOccludeFirstMessage() throws {
         app.terminate()
-        app.launchArguments = ["--seed-messages", "3", "--no-auto-send", "--no-text-animation"]
+        app.launchArguments = ["--seed-messages", "3", "--no-auto-send", "--no-text-animation", "--in-memory"]
         app.launch()
 
         let banner = app.descendants(matching: .any).matching(identifier: "status-bar").firstMatch

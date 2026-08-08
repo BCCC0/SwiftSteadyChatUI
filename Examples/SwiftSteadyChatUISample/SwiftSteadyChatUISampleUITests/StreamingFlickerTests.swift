@@ -5,7 +5,7 @@ import XCTest
 final class StreamingFlickerTests: ChatUITestBase {
     override func setUpWithError() throws {
         continueAfterFailure = false
-        app.launchArguments = ["--long-reply", "--no-text-animation"]
+        app.launchArguments = ["--long-reply", "--no-text-animation", "--in-memory"]
         app.launch()
     }
 
@@ -128,7 +128,7 @@ final class StreamingFlickerTests: ChatUITestBase {
     /// blank below the message).
     func testNoScrollIntoBlankDuringStreaming() throws {
         app.terminate()
-        app.launchArguments = ["--seed-messages", "3", "--long-reply", "--no-text-animation"]
+        app.launchArguments = ["--seed-messages", "3", "--long-reply", "--no-text-animation", "--in-memory"]
         app.launch()
 
         let tv = app.textViews["input-textview"]
@@ -189,7 +189,7 @@ final class StreamingFlickerTests: ChatUITestBase {
     /// conversation gives real content to scroll.
     func testScrollableDuringStreaming() throws {
         app.terminate()
-        app.launchArguments = ["--seed-messages", "8", "--long-reply", "--no-text-animation"]
+        app.launchArguments = ["--seed-messages", "8", "--long-reply", "--no-text-animation", "--in-memory"]
         app.launch()
 
         let tv = app.textViews["input-textview"]
@@ -240,7 +240,7 @@ final class StreamingFlickerTests: ChatUITestBase {
     /// never transiently shrinks the cell (the old 60fps measurement race did).
     func testStreamingMessageNoJitterWhenAwayFromBottom() throws {
         app.terminate()
-        app.launchArguments = ["--seed-messages", "8", "--long-reply", "--no-text-animation"]
+        app.launchArguments = ["--seed-messages", "8", "--long-reply", "--no-text-animation", "--in-memory"]
         app.launch()
 
         let tv = app.textViews["input-textview"]
@@ -307,7 +307,7 @@ final class StreamingFlickerTests: ChatUITestBase {
     /// mis-anchoring / content jumping downward.)
     func testPreviousMessageMovesMonotonicallyWhenFollowing() throws {
         app.terminate()
-        app.launchArguments = ["--seed-messages", "8", "--long-reply", "--no-text-animation"]
+        app.launchArguments = ["--seed-messages", "8", "--long-reply", "--no-text-animation", "--in-memory"]
         app.launch()
 
         let tv = app.textViews["input-textview"]
