@@ -44,6 +44,35 @@ class ChatUITestBase: XCTestCase {
         return (user + assistant).filter { $0.exists }.sorted { $0.frame.minY < $1.frame.minY }
     }
 
+    /// The bottom-most visible message, read race-safely. Per-index element
+    /// binding records a flaky "No matches found for Element at index N"
+    /// failure when the tree changes mid-access (2026-08-05 root cause #2), so
+    /// this only binds an index AFTER re-confirming the count is stable across
+    /// two consecutive snapshots — the tree is quiet, so the bound index cannot
+    /// go stale. Returns nil while the tree is churning (a live insert/stream),
+    /// so callers poll and retry. A conversation ends with an assistant reply,
+    /// so assistant-msg is authoritative with a user-msg fallback.
+    func lastVisibleMessage() -> XCUIElement? {
+        if let last = stableLast(in: app.descendants(matching: .any).matching(identifier: "assistant-msg")) {
+            return last
+        }
+        return stableLast(in: app.descendants(matching: .any).matching(identifier: "user-msg"))
+    }
+
+    /// The query's last element, only once its count is stable (quiet tree).
+    private func stableLast(in query: XCUIElementQuery) -> XCUIElement? {
+        for _ in 0..<3 {
+            let n1 = query.count
+            let n2 = query.count
+            if n2 == n1, n2 > 0 {
+                let last = query.element(boundBy: n2 - 1)
+                if last.exists { return last }
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        return nil
+    }
+
     /// The (single) assistant bubble — the streaming reply.
     func assistantMessage() -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: "assistant-msg").firstMatch
@@ -85,7 +114,10 @@ class ChatUITestBase: XCTestCase {
         var lastSample: (keyTop: CGFloat, msgMaxY: CGFloat)?
         while Date() < deadline {
             let keyTop = app.keyboards.firstMatch.exists ? app.keyboards.firstMatch.frame.minY : -1
-            guard let msgMaxY = visibleMessages().last?.frame.maxY else {
+            // lastVisibleMessage (not visibleMessages().last): this poll runs
+            // while a reply may still be streaming, and per-index enumeration
+            // records the "No matches found for Element at index N" race.
+            guard let msgMaxY = lastVisibleMessage()?.frame.maxY else {
                 Thread.sleep(forTimeInterval: 0.2)
                 continue
             }

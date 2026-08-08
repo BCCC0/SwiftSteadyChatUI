@@ -270,7 +270,9 @@ final class KeyboardPushTests: ChatUITestBase {
             sleep(1)
 
             let inputBarTop = inputBarTop() ?? -999
-            guard let last = visibleMessages().last else {
+            // lastVisibleMessage: the reply may still be settling, and
+            // per-index enumeration races the streaming insert.
+            guard let last = lastVisibleMessage() else {
                 XCTFail("No messages after prompt \(i)")
                 return
             }
